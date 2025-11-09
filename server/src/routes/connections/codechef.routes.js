@@ -1,18 +1,15 @@
-// src/routes/connections/codechef.routes.js
 import express from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import {
-  connectCodeforces,
-  disconnectCodeforces,
-  checkCodeforcesConnection,
+  connectCodechef,
+  disconnectCodechef,
+  checkCodechefConnection,
 } from "../../controllers/Integrations/codechef.controller.js";
-
 
 const router = express.Router();
 
-router.post("/connect", authMiddleware, connectCodeforces);
-router.delete("/disconnect", authMiddleware, disconnectCodeforces);
-router.get("/status", authMiddleware, checkCodeforcesConnection);
-
+router.post("/connect", authMiddleware, connectCodechef);
+router.delete("/disconnect", authMiddleware, disconnectCodechef);
+router.get("/status", authMiddleware, checkCodechefConnection);
 
 export default router;

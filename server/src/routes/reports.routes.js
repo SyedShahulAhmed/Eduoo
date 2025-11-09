@@ -36,9 +36,9 @@ import {
   getSpotifyReport,
 } from "../controllers/reports/spotify.report.js";
 import {
-  createGoalsFromCodeforcesInsights,
-  getCodeforcesAIInsights,
-  getCodeforcesReport,
+  createGoalsFromCodechefInsights,
+  getCodechefAIInsights,
+  getCodechefReport,
 } from "../controllers/reports/codechef.report.js";
 
 // import {
@@ -83,11 +83,11 @@ import {
 //   createGoalsFromYouTubeInsights,
 // } from "../controllers/reports/youtube.report.js";
 
-// import {
-//   getCodeChefReport,
-//   getCodeChefAIInsights,
-//   createGoalsFromCodeChefInsights,
-// } from "../controllers/reports/codechef.report.js";
+import {
+  getCodeforcesReport,
+  getCodeforcesAIInsights,
+  createGoalsFromCodeforcesInsights,
+} from "../controllers/reports/codeforces.report.js";
 
 // import {
 //   getLeetCodeReport,
@@ -183,10 +183,15 @@ router.post("/spotify/goals", authMiddleware, createGoalsFromSpotifyInsights);
 // router.get("/youtube/insights", authMiddleware, getYouTubeAIInsights);
 // router.post("/youtube/goals", authMiddleware, createGoalsFromYouTubeInsights);
 
+// // ==================== 🏆 CODEFORCES ====================
+router.get("/codeforces", authMiddleware, getCodeforcesReport);
+router.get("/codeforces/insights", authMiddleware, getCodeforcesAIInsights);
+router.post("/codeforces/goals", authMiddleware, createGoalsFromCodeforcesInsights);
+
 // // ==================== 🏆 CODECHEF ====================
-router.get("/codechef", authMiddleware, getCodeforcesReport);
-router.get("/codechef/insights", authMiddleware, getCodeforcesAIInsights);
-router.post("/codechef/goals", authMiddleware, createGoalsFromCodeforcesInsights);
+router.get("/codechef", authMiddleware, getCodechefReport);
+router.get("/codechef/insights", authMiddleware, getCodechefAIInsights);
+router.post("/codechef/goals", authMiddleware, createGoalsFromCodechefInsights);
 
 // ==================== 💡 LEETCODE ====================
 router.get("/leetcode", authMiddleware, getLeetCodeReport);

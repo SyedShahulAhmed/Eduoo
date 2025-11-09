@@ -1,52 +1,39 @@
 import fetch from "node-fetch";
+import * as cheerio from "cheerio";
 
-export const fetchCodeforcesData = async (handle) => {
+export const fetchCodechefData = async (username) => {
   try {
-    const baseUrl = "https://codeforces.com/api";
-    
-    // 🧠 Fetch basic profile info
-    const userRes = await fetch(`${baseUrl}/user.info?handles=${handle}`);
-    const userData = await userRes.json();
-    if (userData.status !== "OK" || !userData.result?.length)
-      throw new Error("Invalid Codeforces user handle");
-    
-    const profile = userData.result[0];
+    const res = await fetch(`https://www.codechef.com/users/${username}`);
+    if (!res.ok) throw new Error("Profile not found");
 
-    // 📊 Fetch rating history
-    const ratingRes = await fetch(`${baseUrl}/user.rating?handle=${handle}`);
-    const ratingData = await ratingRes.json();
-    const contests = ratingData.status === "OK" ? ratingData.result : [];
+    const html = await res.text();
+    const $ = cheerio.load(html);
 
-    const totalContests = contests.length;
-    const recentContest = contests.at(-1);
-    const avgChange = contests.length
-      ? contests.reduce((sum, c) => sum + (c.newRating - c.oldRating), 0) / contests.length
-      : 0;
+    const name = $(".user-name").text().trim() || username;
+    const stars = $(".rating").first().text().trim() || "Unrated";
+    const rating = $(".rating-number").first().text().trim() || "0";
+    const highestRating = $(".rating-header small").text().replace(/[()]/g, "").trim() || "N/A";
+
+    const ranks = $(".rating-ranks ul li");
+    const globalRank = $(ranks[0]).find("strong").text().trim() || "N/A";
+    const countryRank = $(ranks[1]).find("strong").text().trim() || "N/A";
+
+    const solvedSection = $(".problems-solved").first().text();
+    const problemsSolved = solvedSection.match(/\d+/g)?.[0] || "0";
 
     return {
-      username: profile.handle,
-      rating: profile.rating || 0,
-      maxRating: profile.maxRating || 0,
-      rank: profile.rank || "unrated",
-      maxRank: profile.maxRank || "unrated",
-      organization: profile.organization || "N/A",
-      contribution: profile.contribution,
-      friendOfCount: profile.friendOfCount,
-      totalContests,
-      avgChange: Math.round(avgChange),
-      lastContest: recentContest
-        ? {
-            name: recentContest.contestName,
-            rank: recentContest.rank,
-            newRating: recentContest.newRating,
-            change: recentContest.newRating - recentContest.oldRating,
-          }
-        : null,
-      profileUrl: `https://codeforces.com/profile/${profile.handle}`,
-      avatar: profile.avatar,
+      username,
+      name,
+      stars,
+      rating,
+      highestRating,
+      globalRank,
+      countryRank,
+      problemsSolved,
+      profileUrl: `https://www.codechef.com/users/${username}`,
     };
   } catch (err) {
-    console.error("❌ Codeforces API Error:", err.message);
-    throw new Error("Failed to fetch Codeforces data");
+    console.error("❌ CodeChef scrape failed:", err.message);
+    throw new Error("Failed to fetch CodeChef profile");
   }
 };

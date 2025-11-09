@@ -1,51 +1,63 @@
 import Connection from "../../models/Connection.js";
-import { fetchCodeforcesData } from "../../services/codechef.service.js";
+import { fetchCodechefData } from "../../services/codechef.service.js";
 import fetch from "node-fetch";
 import { ENV } from "../../config/env.js";
 import Goal from "../../models/Goal.js";
 
-export const getCodeforcesReport = async (req, res) => {
+/** 📊 Get CodeChef Report */
+export const getCodechefReport = async (req, res) => {
   try {
     const connection = await Connection.findOne({
       userId: req.user.id,
-      platform: "codeforces",
+      platform: "codechef",
     });
-    if (!connection?.connected || !connection.accessToken)
-      return res.status(400).json({ message: "Codeforces not connected" });
 
-    const handle = connection.accessToken;
-    const data = await fetchCodeforcesData(handle);
+    if (!connection?.connected || !connection.accessToken)
+      return res.status(400).json({ message: "CodeChef not connected" });
+
+    const username = connection.accessToken;
+    const data = await fetchCodechefData(username);
 
     res.status(200).json({
-      message: "Codeforces report generated successfully",
+      message: "CodeChef report generated successfully",
       report: data,
     });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch Codeforces report", error: err.message });
+    res.status(500).json({
+      message: "Failed to fetch CodeChef report",
+      error: err.message,
+    });
   }
 };
 
-export const getCodeforcesAIInsights = async (req, res) => {
+/** 🤖 CodeChef AI Insights (Gemini) */
+export const getCodechefAIInsights = async (req, res) => {
   try {
     const connection = await Connection.findOne({
       userId: req.user.id,
-      platform: "codeforces",
+      platform: "codechef",
     });
     if (!connection?.connected || !connection.accessToken)
-      return res.status(400).json({ message: "Codeforces not connected" });
+      return res.status(400).json({ message: "CodeChef not connected" });
 
-    const handle = connection.accessToken;
-    const data = await fetchCodeforcesData(handle);
+    const username = connection.accessToken;
+    const data = await fetchCodechefData(username);
 
     const prompt = `
-Analyze Codeforces performance for ${data.username}:
-Rating: ${data.rating}, Rank: ${data.rank}, Contests: ${data.totalContests}
+You are AICOO, a friendly competitive programming mentor analyzing a CodeChef user profile.
 
-Respond in JSON:
+User: ${data.username}
+Rating: ${data.rating}
+Stars: ${data.stars}
+Global Rank: ${data.globalRank}
+Country Rank: ${data.countryRank}
+Problems Solved: ${data.problemsSolved}
+
+Respond in JSON format:
 {
-  "insights": ["3 performance insights"],
-  "recommendations": ["3 improvement tips"],
-  "motivation": "One motivational line"
+  "insights": ["3 clear performance insights"],
+  "recommendations": ["3 actionable improvement tips"],
+  "motivation": "One motivational quote"
 }`;
 
     const aiRes = await fetch(
@@ -58,7 +70,9 @@ Respond in JSON:
     );
 
     const aiData = await aiRes.json();
-    let textOutput = aiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    let textOutput =
+      aiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+
     textOutput = textOutput.replace(/```json|```/g, "").trim();
 
     let parsed;
@@ -67,59 +81,58 @@ Respond in JSON:
     } catch {
       parsed = {
         insights: [
-          "Your performance is steadily improving.",
-          "You show strong consistency in recent contests.",
-          "You’re mastering mid-tier problem sets."
+          "You have solid consistency in solving medium problems.",
+          "Your contest participation shows steady rating growth.",
+          "You perform better under long challenge contests.",
         ],
         recommendations: [
-          "Upsolve 3 unsolved problems weekly.",
-          "Review editorials after each contest.",
-          "Increase participation frequency for faster growth."
+          "Focus on upsolving problems post-contest.",
+          "Increase participation in short contests for faster feedback.",
+          "Target specific problem tags like DP or Graphs to level up.",
         ],
-        motivation: "Every contest is a new opportunity to climb higher 🚀"
+        motivation: "Every problem solved builds your coding legacy 💪",
       };
     }
 
-    res.status(200).json({ message: "Codeforces AI Insights generated", data: parsed });
+    res.status(200).json({
+      message: "CodeChef AI Insights generated successfully (Gemini)",
+      data: parsed,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Failed to generate insights", error: err.message });
+    res.status(500).json({
+      message: "Failed to generate AI insights",
+      error: err.message,
+    });
   }
 };
-export const createGoalsFromCodeforcesInsights = async (req, res) => {
+
+/** 🎯 Create Goals from AI Insights */
+export const createGoalsFromCodechefInsights = async (req, res) => {
   try {
-    // 🧩 1️⃣ Get stored username (handle) from the user’s connection
     const connection = await Connection.findOne({
       userId: req.user.id,
-      platform: "codeforces",
+      platform: "codechef",
     });
 
-    if (!connection?.connected || !connection.accessToken) {
-      return res.status(400).json({ message: "Codeforces not connected" });
-    }
+    if (!connection?.connected || !connection.accessToken)
+      return res.status(400).json({ message: "CodeChef not connected" });
 
-    const handle = connection.accessToken;
-
-    // 🧠 2️⃣ Fetch insights again (from our own endpoint)
     const insightsRes = await fetch(
-      `${ENV.SERVER_URL}/api/reports/codeforces/insights`,
+      `${ENV.SERVER_URL}/api/reports/codechef/insights`,
       {
         headers: { Authorization: req.headers.authorization },
       }
     );
-
     const insightsData = await insightsRes.json();
 
-    // ✅ Ensure we have AI recommendations
-    if (!insightsData?.data?.recommendations?.length) {
+    if (!insightsData?.data?.recommendations?.length)
       return res
         .status(400)
         .json({ message: "No AI recommendations found to convert into goals" });
-    }
 
     const recommendations = insightsData.data.recommendations;
     const createdGoals = [];
 
-    // 🧱 3️⃣ Convert recommendations into Goal entries
     for (const rec of recommendations.slice(0, 3)) {
       const goal = await Goal.create({
         userId: req.user.id,
@@ -133,15 +146,13 @@ export const createGoalsFromCodeforcesInsights = async (req, res) => {
       createdGoals.push(goal);
     }
 
-    // 🎯 4️⃣ Return newly created goals
     res.status(201).json({
-      message: "AI-based Codeforces goals created successfully",
+      message: "AI-based CodeChef goals created successfully",
       goals: createdGoals,
     });
   } catch (error) {
-    console.error("❌ createGoalsFromCodeforcesInsights Error:", error);
     res.status(500).json({
-      message: "Failed to create AI-based Codeforces goals",
+      message: "Failed to create AI-based CodeChef goals",
       error: error.message,
     });
   }

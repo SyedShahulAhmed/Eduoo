@@ -1,59 +1,74 @@
 import Connection from "../../models/Connection.js";
 
-/** 1️⃣ Connect (store username input) */
-export const connectCodeforces = async (req, res) => {
+/** 🧩 Connect CodeChef — Save username from frontend */
+export const connectCodechef = async (req, res) => {
   try {
     const { username } = req.body;
-    if (!username) return res.status(400).json({ message: "Codeforces username is required" });
+    if (!username)
+      return res.status(400).json({ message: "CodeChef username is required" });
 
     await Connection.findOneAndUpdate(
-      { userId: req.user.id, platform: "codeforces" },
+      { userId: req.user.id, platform: "codechef" },
       {
         connected: true,
-        accessToken: username, // storing username in place of accessToken for simplicity
+        accessToken: username,
         lastSync: new Date(),
       },
       { upsert: true, new: true }
     );
 
-    res.status(200).json({ message: "Codeforces connected successfully ✅", username });
+    res.status(200).json({
+      message: "CodeChef connected successfully ✅",
+      username,
+    });
   } catch (error) {
-    console.error("❌ connectCodeforces Error:", error);
-    res.status(500).json({ message: "Codeforces connect failed", error: error.message });
+    res.status(500).json({
+      message: "CodeChef connect failed",
+      error: error.message,
+    });
   }
 };
 
-/** 2️⃣ Disconnect Codeforces */
-export const disconnectCodeforces = async (req, res) => {
+/** 🔌 Disconnect CodeChef */
+export const disconnectCodechef = async (req, res) => {
   try {
     await Connection.findOneAndUpdate(
-      { userId: req.user.id, platform: "codeforces" },
+      { userId: req.user.id, platform: "codechef" },
       { connected: false, accessToken: null }
     );
-    res.status(200).json({ message: "Codeforces disconnected successfully" });
+    res.status(200).json({ message: "CodeChef disconnected successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Failed to disconnect Codeforces", error: error.message });
+    res.status(500).json({
+      message: "Failed to disconnect CodeChef",
+      error: error.message,
+    });
   }
 };
 
-/** 3️⃣ Check connection status */
-export const checkCodeforcesConnection = async (req, res) => {
+/** ✅ Check CodeChef connection */
+export const checkCodechefConnection = async (req, res) => {
   try {
     const connection = await Connection.findOne({
       userId: req.user.id,
-      platform: "codeforces",
+      platform: "codechef",
     });
 
     if (!connection || !connection.connected)
-      return res.status(200).json({ connected: false, message: "Not connected" });
+      return res.status(200).json({
+        connected: false,
+        message: "CodeChef not connected",
+      });
 
     res.status(200).json({
       connected: true,
       username: connection.accessToken,
       lastSync: connection.lastSync,
-      message: "Codeforces connected ✅",
+      message: "CodeChef connected ✅",
     });
   } catch (error) {
-    res.status(500).json({ message: "Error checking connection", error: error.message });
+    res.status(500).json({
+      message: "Error checking CodeChef connection",
+      error: error.message,
+    });
   }
 };
