@@ -15,6 +15,7 @@ import udemyRoutes from "./connections/udemy.routes.js";
 import duolingoRoutes from "./connections/duolingo.routes.js";
 import hackerrankRoutes from "./connections/hackerrank.routes.js";
 import discordRoutes from "./connections/discord.routes.js";
+import codeforcesRoutes from "./connections/codeforces.routes.js"
 // import userProfileRoutes from "./connections/userProfile.routes.js";
 
 const router = express.Router();
@@ -38,6 +39,10 @@ router.use("/hackerrank", hackerrankRoutes);
 
 // 6️⃣ CodeChef
 router.use("/codechef", codechefRoutes);
+
+// CodeForces
+
+router.use("/codeforces", codeforcesRoutes)
 
 // 7️⃣ Notion
 router.use("/notion", notionRoutes);
