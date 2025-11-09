@@ -6,35 +6,53 @@ import { fetchSpotifyData } from "../../services/spotify.service.js";
 
 export const getSpotifyReport = async (req, res) => {
   try {
-    const connection = await Connection.findOne({ userId: req.user.id, platform: "spotify" });
-    if (!connection || !connection.accessToken) return res.status(400).json({ message: "Spotify not connected" });
+    const connection = await Connection.findOne({
+      userId: req.user.id,
+      platform: "spotify",
+    });
+    if (!connection || !connection.accessToken)
+      return res.status(400).json({ message: "Spotify not connected" });
 
     const data = await fetchSpotifyData(connection.accessToken);
     res.status(200).json({ message: "Spotify report generated", data });
   } catch (error) {
-    res.status(500).json({ message: "Spotify report failed", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Spotify report failed", error: error.message });
   }
 };
 
 export const getSpotifyAIInsights = async (req, res) => {
   try {
-    const connection = await Connection.findOne({ userId: req.user.id, platform: "spotify" });
-    if (!connection?.accessToken) return res.status(400).json({ message: "Spotify not connected" });
+    const connection = await Connection.findOne({
+      userId: req.user.id,
+      platform: "spotify",
+    });
+    if (!connection?.accessToken)
+      return res.status(400).json({ message: "Spotify not connected" });
 
     const data = await fetchSpotifyData(connection.accessToken);
 
     const prompt = `
-You are AICOO, a focus productivity mentor.
-User's recent music includes: ${data.recentTracks.join(", ")}.
-Top artists: ${data.artists.join(", ")}.
-Playlists: ${data.playlists.join(", ")}.
+You are AICOO, a friendly focus productivity mentor analyzing a user's Spotify activity.
 
-Return JSON:
+User: ${data.profile.displayName || "Unknown"}
+Country: ${data.profile.country || "N/A"}
+Followers: ${data.profile.followers || 0}
+
+🎵 Current Track: ${data.currentTrack?.name || "None"} by ${data.currentTrack?.artist || "N/A"}
+🎧 Top Artists: ${(data.topArtists || []).join(", ") || "No artists found"}
+🔥 Top Tracks: ${(data.topTracks || []).join(", ") || "No tracks found"}
+🎼 Avg Tempo: ${data.stats.avgTempo} BPM | Energy: ${data.stats.avgEnergy}%
+🗂️ Playlists: ${data.playlists?.map((p) => p.name).join(", ") || "No playlists"}
+
+Give 3 parts in JSON:
 {
-  "insights": ["3 insights about focus/music trends"],
-  "recommendations": ["3 music productivity suggestions"],
-  "motivation": "One motivational line"
-}`;
+  "insights": ["3 insights about the user's listening or focus patterns"],
+  "recommendations": ["3 productivity suggestions based on listening habits"],
+  "motivation": "One short motivational line"
+}
+`;
 
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
@@ -48,19 +66,36 @@ Return JSON:
     const result = await geminiRes.json();
     let parsed;
     try {
-      const clean = result?.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json|```/g, "").trim();
+      const clean = result?.candidates?.[0]?.content?.parts?.[0]?.text
+        ?.replace(/```json|```/g, "")
+        .trim();
       parsed = JSON.parse(clean);
     } catch {
       parsed = {
-        insights: ["You enjoy focus-driven playlists.", "Music variety boosts your sessions.", "Strong rhythm choices aid deep work."],
-        recommendations: ["Try instrumental tracks for studying.", "Limit lyrical songs during focus time.", "Create 'Flow Mode' playlists."],
+        insights: [
+          "You enjoy focus-driven playlists.",
+          "Music variety boosts your sessions.",
+          "Strong rhythm choices aid deep work.",
+        ],
+        recommendations: [
+          "Try instrumental tracks for studying.",
+          "Limit lyrical songs during focus time.",
+          "Create 'Flow Mode' playlists.",
+        ],
         motivation: "Your soundtrack powers your success 🎧",
       };
     }
 
-    res.status(200).json({ message: "Spotify AI Insights generated", data: parsed });
+    res
+      .status(200)
+      .json({ message: "Spotify AI Insights generated", data: parsed });
   } catch (err) {
-    res.status(500).json({ message: "Failed to generate Spotify insights", error: err.message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to generate Spotify insights",
+        error: err.message,
+      });
   }
 };
 export const createGoalsFromSpotifyInsights = async (req, res) => {
@@ -75,9 +110,12 @@ export const createGoalsFromSpotifyInsights = async (req, res) => {
     }
 
     // Step 1: Fetch insights from AI endpoint
-    const insightsRes = await fetch(`${ENV.SERVER_URL}/api/reports/spotify/insights`, {
-      headers: { Authorization: req.headers.authorization },
-    });
+    const insightsRes = await fetch(
+      `${ENV.SERVER_URL}/api/reports/spotify/insights`,
+      {
+        headers: { Authorization: req.headers.authorization },
+      }
+    );
     const insightsData = await insightsRes.json();
 
     if (!insightsData?.data?.recommendations?.length) {
