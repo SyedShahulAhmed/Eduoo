@@ -1,133 +1,125 @@
-// controllers/Reports/codechef.reports.js
-import fetch from "node-fetch";
 import Connection from "../../models/Connection.js";
-import Goal from "../../models/Goal.js";
+import { fetchCodeforcesData } from "../../services/codechef.service.js";
+import fetch from "node-fetch";
 import { ENV } from "../../config/env.js";
-import { fetchCodeChefData } from "../../services/codechef.service.js";
+import Goal from "../../models/Goal.js";
 
-export const getCodeChefReport = async (req, res) => {
+export const getCodeforcesReport = async (req, res) => {
   try {
-    // try to use stored token first; otherwise allow client to pass ?username=
-    const connection = await Connection.findOne({ userId: req.user.id, platform: "codechef" });
-    const username = req.query.username || (connection?.username || null);
+    const connection = await Connection.findOne({
+      userId: req.user.id,
+      platform: "codeforces",
+    });
+    if (!connection?.connected || !connection.accessToken)
+      return res.status(400).json({ message: "Codeforces not connected" });
 
-    if (!connection?.accessToken && !username) {
-      return res.status(400).json({ message: "CodeChef not connected and username not provided" });
-    }
+    const handle = connection.accessToken;
+    const data = await fetchCodeforcesData(handle);
 
-    const data = await fetchCodeChefData({ accessToken: connection?.accessToken, publicUsername: username });
-
-    return res.status(200).json({ message: "CodeChef report generated", report: data });
+    res.status(200).json({
+      message: "Codeforces report generated successfully",
+      report: data,
+    });
   } catch (err) {
-    console.error("❌ getCodeChefReport Error:", err);
-    return res.status(500).json({ message: "Failed to fetch CodeChef report", error: err.message });
+    res.status(500).json({ message: "Failed to fetch Codeforces report", error: err.message });
   }
 };
 
-export const getCodeChefAIInsights = async (req, res) => {
+export const getCodeforcesAIInsights = async (req, res) => {
   try {
-    const connection = await Connection.findOne({ userId: req.user.id, platform: "codechef" });
-    const username = req.query.username || (connection?.username || null);
+    const connection = await Connection.findOne({
+      userId: req.user.id,
+      platform: "codeforces",
+    });
+    if (!connection?.connected || !connection.accessToken)
+      return res.status(400).json({ message: "Codeforces not connected" });
 
-    if (!connection?.accessToken && !username) {
-      return res.status(400).json({ message: "CodeChef not connected and username not provided" });
-    }
+    const handle = connection.accessToken;
+    const data = await fetchCodeforcesData(handle);
 
-    const data = await fetchCodeChefData({ accessToken: connection?.accessToken, publicUsername: username });
-
-    // Build a prompt for Gemini
     const prompt = `
-You are AICOO, a friendly productivity coach analyzing competitive programming progress.
+Analyze Codeforces performance for ${data.username}:
+Rating: ${data.rating}, Rank: ${data.rank}, Contests: ${data.totalContests}
 
-User: ${data.username}
-Rating: ${data.rating || "Unknown"}
-Recent Submissions: ${Array.isArray(data.recentSubmissions) ? data.recentSubmissions.slice(0,5).map(s => s.code || s.problem_code || s.problem || JSON.stringify(s)).join(", ") : "N/A"}
-Top contests sample: ${Array.isArray(data.contests) ? data.contests.slice(0,3).map(c => c.name || JSON.stringify(c)).join(", ") : "N/A"}
-
-Return JSON:
+Respond in JSON:
 {
-  "insights": ["3 observations about user's competitive programming activity"],
-  "recommendations": ["3 short actionable steps to improve rank or habits"],
-  "motivation": "One punchy motivational sentence."
-}
-    `;
+  "insights": ["3 performance insights"],
+  "recommendations": ["3 improvement tips"],
+  "motivation": "One motivational line"
+}`;
 
-    const geminiRes = await fetch(
+    const aiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       }
     );
 
-    const geminiData = await geminiRes.json();
-    let textOutput = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+    const aiData = await aiRes.json();
+    let textOutput = aiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    textOutput = textOutput.replace(/```json|```/g, "").trim();
 
-    if (!textOutput) {
-      console.error("⚠️ Gemini raw response (codechef):", JSON.stringify(geminiData, null, 2));
-      return res.status(500).json({ message: "Gemini returned no valid output", rawResponse: geminiData });
-    }
-
-    // Clean and parse JSON
-    textOutput = textOutput.replace(/```json/g, "").replace(/```/g, "").trim();
     let parsed;
     try {
       parsed = JSON.parse(textOutput);
     } catch {
       parsed = {
         insights: [
-          "Your submission frequency is moderate and focused on long challenges.",
-          "Rating shows steady improvement.",
-          "You tend to practice a mix of easy and medium problems."
+          "Your performance is steadily improving.",
+          "You show strong consistency in recent contests.",
+          "You’re mastering mid-tier problem sets."
         ],
         recommendations: [
-          "Do timed practice sessions twice per week.",
-          "Focus on data-structure problems to raise rating.",
-          "Participate in at least one lunchtime or contest monthly."
+          "Upsolve 3 unsolved problems weekly.",
+          "Review editorials after each contest.",
+          "Increase participation frequency for faster growth."
         ],
-        motivation: "Consistency beats intensity — keep solving every day!"
+        motivation: "Every contest is a new opportunity to climb higher 🚀"
       };
     }
 
-    return res.status(200).json({
-      message: "CodeChef AI Insights generated successfully",
-      data: {
-        profile: data,
-        insights: parsed.insights,
-        recommendations: parsed.recommendations,
-        motivation: parsed.motivation,
-      },
-    });
+    res.status(200).json({ message: "Codeforces AI Insights generated", data: parsed });
   } catch (err) {
-    console.error("❌ getCodeChefAIInsights Error:", err);
-    return res.status(500).json({ message: "Failed to generate AI CodeChef insights", error: err.message });
+    res.status(500).json({ message: "Failed to generate insights", error: err.message });
   }
 };
-
-export const createGoalsFromCodechefInsights = async (req, res) => {
+export const createGoalsFromCodeforcesInsights = async (req, res) => {
   try {
-    const connection = await Connection.findOne({ userId: req.user.id, platform: "codechef" });
-    const username = req.query.username || (connection?.username || null);
+    // 🧩 1️⃣ Get stored username (handle) from the user’s connection
+    const connection = await Connection.findOne({
+      userId: req.user.id,
+      platform: "codeforces",
+    });
 
-    if (!connection?.accessToken && !username) {
-      return res.status(400).json({ message: "CodeChef not connected and username not provided" });
+    if (!connection?.connected || !connection.accessToken) {
+      return res.status(400).json({ message: "Codeforces not connected" });
     }
 
-    // call insights endpoint (internal)
-    const insightsRes = await fetch(`${ENV.SERVER_URL}/api/reports/codechef/insights${username ? `?username=${username}` : ""}`, {
-      headers: { Authorization: req.headers.authorization },
-    });
+    const handle = connection.accessToken;
+
+    // 🧠 2️⃣ Fetch insights again (from our own endpoint)
+    const insightsRes = await fetch(
+      `${ENV.SERVER_URL}/api/reports/codeforces/insights`,
+      {
+        headers: { Authorization: req.headers.authorization },
+      }
+    );
+
     const insightsData = await insightsRes.json();
 
-    const recommendations = insightsData?.data?.recommendations || [];
-    if (!recommendations.length) {
-      return res.status(400).json({ message: "No AI recommendations found to convert into goals" });
+    // ✅ Ensure we have AI recommendations
+    if (!insightsData?.data?.recommendations?.length) {
+      return res
+        .status(400)
+        .json({ message: "No AI recommendations found to convert into goals" });
     }
 
+    const recommendations = insightsData.data.recommendations;
     const createdGoals = [];
+
+    // 🧱 3️⃣ Convert recommendations into Goal entries
     for (const rec of recommendations.slice(0, 3)) {
       const goal = await Goal.create({
         userId: req.user.id,
@@ -141,9 +133,16 @@ export const createGoalsFromCodechefInsights = async (req, res) => {
       createdGoals.push(goal);
     }
 
-    return res.status(201).json({ message: "AI-based CodeChef goals created successfully", goals: createdGoals });
-  } catch (err) {
-    console.error("❌ createGoalsFromCodechefInsights Error:", err);
-    return res.status(500).json({ message: "Failed to create CodeChef goals", error: err.message });
+    // 🎯 4️⃣ Return newly created goals
+    res.status(201).json({
+      message: "AI-based Codeforces goals created successfully",
+      goals: createdGoals,
+    });
+  } catch (error) {
+    console.error("❌ createGoalsFromCodeforcesInsights Error:", error);
+    res.status(500).json({
+      message: "Failed to create AI-based Codeforces goals",
+      error: error.message,
+    });
   }
 };

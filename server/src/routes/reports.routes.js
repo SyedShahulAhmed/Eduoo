@@ -35,7 +35,11 @@ import {
   getSpotifyAIInsights,
   getSpotifyReport,
 } from "../controllers/reports/spotify.report.js";
-import { createGoalsFromCodechefInsights, getCodeChefAIInsights, getCodeChefReport } from "../controllers/reports/codechef.report.js";
+import {
+  createGoalsFromCodeforcesInsights,
+  getCodeforcesAIInsights,
+  getCodeforcesReport,
+} from "../controllers/reports/codechef.report.js";
 
 // import {
 //   getNotionReport,
@@ -180,9 +184,9 @@ router.post("/spotify/goals", authMiddleware, createGoalsFromSpotifyInsights);
 // router.post("/youtube/goals", authMiddleware, createGoalsFromYouTubeInsights);
 
 // // ==================== 🏆 CODECHEF ====================
-router.get("/codechef", authMiddleware, getCodeChefReport);
-router.get("/codechef/insights", authMiddleware, getCodeChefAIInsights);
-router.post("/codechef/goals", authMiddleware, createGoalsFromCodechefInsights);
+router.get("/codechef", authMiddleware, getCodeforcesReport);
+router.get("/codechef/insights", authMiddleware, getCodeforcesAIInsights);
+router.post("/codechef/goals", authMiddleware, createGoalsFromCodeforcesInsights);
 
 // ==================== 💡 LEETCODE ====================
 router.get("/leetcode", authMiddleware, getLeetCodeReport);

@@ -2,19 +2,17 @@
 import express from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import {
-  connectCodeChef,
-  disconnectCodeChef,
-  checkCodeChefConnection,
-  codechefCallback,
+  connectCodeforces,
+  disconnectCodeforces,
+  checkCodeforcesConnection,
 } from "../../controllers/Integrations/codechef.controller.js";
 
 
 const router = express.Router();
 
-router.get("/connect", authMiddleware, connectCodeChef);
-router.get("/callback", codechefCallback); // public callback (token passed in query as earlier)
-router.delete("/disconnect", authMiddleware, disconnectCodeChef);
-router.get("/status", authMiddleware, checkCodeChefConnection);
+router.post("/connect", authMiddleware, connectCodeforces);
+router.delete("/disconnect", authMiddleware, disconnectCodeforces);
+router.get("/status", authMiddleware, checkCodeforcesConnection);
 
 
 export default router;
