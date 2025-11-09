@@ -10,7 +10,10 @@ export const connectSpotify = async (req, res) => {
     if (!token)
       return res.status(401).json({ message: "Authorization token missing" });
 
-    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${ENV.SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${ENV.SERVER_URL}/api/connections/spotify/callback?token=${token}&scope=user-read-recently-played%20user-read-playback-state%20playlist-read-private`;
+    const redirectUri = `${ENV.SERVER_URL.replace(/\/$/, "")}/api/connections/spotify/callback`;
+    const spotifyAuthUrl = `https://accounts.spotify.com/authorize?client_id=${ENV.SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&scope=${encodeURIComponent(ENV.SPOTIFY_SCOPE)}&state=${token}`;
 
     return res.redirect(spotifyAuthUrl);
   } catch (error) {
@@ -24,12 +27,18 @@ export const connectSpotify = async (req, res) => {
 /** 2️⃣ Spotify OAuth callback */
 export const spotifyCallback = async (req, res) => {
   try {
-    const { code, token } = req.query;
+    const { code, state } = req.query;
+    const token = state;
+
     if (!code || !token)
       return res.status(400).json({ message: "Missing code or token" });
 
+    // Decode user JWT to get userId
     const decoded = jwt.verify(token, ENV.JWT_SECRET);
     const userId = decoded.id;
+
+    // Must match EXACTLY the redirect_uri registered in Spotify app
+    const redirectUri = `${ENV.SERVER_URL.replace(/\/$/, "")}/api/connections/spotify/callback`;
 
     const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
       method: "POST",
@@ -44,18 +53,21 @@ export const spotifyCallback = async (req, res) => {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: `${ENV.SERVER_URL}/api/connections/spotify/callback?token=${token}`,
-      }),
+        redirect_uri: redirectUri, // ✅ no ?token or state here
+      }).toString(),
     });
 
     const tokenData = await tokenRes.json();
     const accessToken = tokenData.access_token;
 
-    if (!accessToken)
+    if (!accessToken) {
+      console.error("⚠️ Spotify token response:", tokenData);
       return res
         .status(400)
-        .json({ message: "Failed to get Spotify access token" });
+        .json({ message: "Failed to get Spotify access token", raw: tokenData });
+    }
 
+    // Save connection to DB
     await Connection.findOneAndUpdate(
       { userId, platform: "spotify" },
       { accessToken, connected: true, lastSync: new Date() },
@@ -87,7 +99,7 @@ export const disconnectSpotify = async (req, res) => {
   }
 };
 
-/** 4️⃣ Check connection status */
+/** 4️⃣ Check Spotify connection status */
 export const checkSpotifyConnection = async (req, res) => {
   try {
     const connection = await Connection.findOne({
@@ -96,13 +108,14 @@ export const checkSpotifyConnection = async (req, res) => {
     });
     if (!connection || !connection.connected)
       return res.status(200).json({ connected: false });
-    res.status(200).json({ connected: true, lastSync: connection.lastSync });
+    res.status(200).json({
+      connected: true,
+      lastSync: connection.lastSync,
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        message: "Error checking Spotify connection",
-        error: err.message,
-      });
+    res.status(500).json({
+      message: "Error checking Spotify connection",
+      error: err.message,
+    });
   }
 };
