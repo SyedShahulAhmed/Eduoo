@@ -37,7 +37,10 @@ export const ENV = {
     PASS: process.env.EMAIL_PASS,
     FROM: process.env.EMAIL_FROM || `"AICOO" <${process.env.EMAIL_USER}>`,
   },
-
+  SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID,
+  SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET,
+  SPOTIFY_REDIRECT_URI: process.env.SPOTIFY_REDIRECT_URI,
+  SPOTIFY_SCOPE: process.env.SPOTIFY_SCOPE,
   // OTP
   OTP_EXPIRY_MINUTES: parseInt(process.env.OTP_EXPIRY_MINUTES || "5"),
   OTP_RESEND_LIMIT: parseInt(process.env.OTP_RESEND_LIMIT || "3"),
