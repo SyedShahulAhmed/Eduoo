@@ -4,8 +4,6 @@ import fetch from "node-fetch"; // for Gemini AI insights
 import Connection from "../../models/Connection.js";
 import { fetchGitHubData } from "../../services/github.service.js";
 
-
-/** GET /api/reports/github */
 /** 6️⃣ GitHub Report */
 export const getGitHubReport = async (req, res) => {
   try {
@@ -27,20 +25,25 @@ export const getGitHubReport = async (req, res) => {
         publicRepos: data.publicRepos,
         followers: data.followers,
         recentCommits: data.recentCommits,
+        commitStreak: data.commitStreak,
         topLanguages: data.topLanguages,
+        recentActivity: data.recentActivity,
         profileUrl: data.profileUrl,
         avatarUrl: data.avatarUrl,
       },
     });
   } catch (error) {
     console.error("❌ getGitHubReport Error:", error);
-    res.status(500).json({ message: "Failed to fetch GitHub report", error: error.message });
+    res.status(500).json({
+      message: "Failed to fetch GitHub report",
+      error: error.message,
+    });
   }
 };
-/** 7️⃣  GitHub AI Insights Report  */
+
+/** 7️⃣ GitHub AI Insights Report */
 export const getGitHubAIInsights = async (req, res) => {
   try {
-    // 🔹 Get stored GitHub access token
     const connection = await Connection.findOne({
       userId: req.user.id,
       platform: "github",
@@ -50,28 +53,29 @@ export const getGitHubAIInsights = async (req, res) => {
       return res.status(400).json({ message: "GitHub not connected" });
     }
 
-    // 🔹 Fetch GitHub activity data
     const data = await fetchGitHubData(connection.accessToken);
 
-    // 🔹 Build AI prompt
+    // 🔹 Enhanced AI Prompt using commit streak & activity
     const prompt = `
-You are AICOO, a friendly productivity mentor analyzing GitHub activity.
+You are AICOO, an AI productivity mentor analyzing a developer’s GitHub performance.
 
 User: ${data.username}
 Followers: ${data.followers}
-Public Repos: ${data.publicRepos}
-Recent Commits: ${data.recentCommits}
+Public Repositories: ${data.publicRepos}
+Recent Commits (last 30 days): ${data.recentCommits}
+Current Commit Streak: ${data.commitStreak.current}
+Longest Commit Streak: ${data.commitStreak.longest}
 Top Languages: ${data.topLanguages.join(", ")}
+Recent Active Days: ${data.recentActivity.join(", ")}
 
-Give a JSON response:
+Generate a concise JSON output:
 {
-  "insights": ["3 clear observations about the user's coding trends"],
-  "recommendations": ["3 short actionable suggestions for improvement"],
-  "motivation": "One powerful motivational sentence."
+  "insights": ["3 clear insights about user's coding behavior and consistency"],
+  "recommendations": ["3 short actionable goals for improvement"],
+  "motivation": "1 strong motivational quote"
 }
-    `;
+`;
 
-    // 🔹 Call Gemini 2.5 Flash
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
       {
@@ -95,7 +99,7 @@ Give a JSON response:
       });
     }
 
-    // Clean and parse JSON
+    // Clean JSON string
     textOutput = textOutput.replace(/```json/g, "").replace(/```/g, "").trim();
 
     let parsed;
@@ -104,22 +108,22 @@ Give a JSON response:
     } catch {
       parsed = {
         insights: [
-          "Your GitHub activity is consistent and technically focused.",
-          "Top languages indicate strong front-end skills.",
-          "Your repositories show structured learning progress.",
+          "Your coding consistency is solid but could improve with daily micro-commits.",
+          "Top languages show front-end dominance — consider balancing with backend work.",
+          "Your current streak shows dedication; build on that momentum.",
         ],
         recommendations: [
-          "Push commits at least twice weekly.",
-          "Explore back-end or AI-related projects.",
-          "Document repos with clear READMEs for visibility.",
+          "Increase commit frequency to maintain a longer streak.",
+          "Start a new backend or AI repo this week.",
+          "Engage in more collaborative projects for growth.",
         ],
         motivation:
-          "Every commit builds your story — keep coding and improving 🚀",
+          "Consistency beats intensity — one commit a day keeps stagnation away 🚀",
       };
     }
 
     res.status(200).json({
-      message: "GitHub AI Insights generated successfully ( Gemini )",
+      message: "GitHub AI Insights generated successfully (Gemini)",
       data: {
         profile: data,
         insights: parsed.insights,
@@ -135,6 +139,8 @@ Give a JSON response:
     });
   }
 };
+
+/** 8️⃣ Convert AI Recommendations → Goals */
 export const createGoalsFromGithubInsights = async (req, res) => {
   try {
     const connection = await Connection.findOne({
@@ -146,7 +152,7 @@ export const createGoalsFromGithubInsights = async (req, res) => {
       return res.status(400).json({ message: "GitHub not connected" });
     }
 
-    // Step 1: Fetch AI insights again
+    // Fetch insights again
     const insightsRes = await fetch(
       `${ENV.SERVER_URL}/api/reports/github/insights`,
       {
@@ -157,12 +163,11 @@ export const createGoalsFromGithubInsights = async (req, res) => {
     const insightsData = await insightsRes.json();
 
     if (!insightsData?.data?.recommendations?.length) {
-      return res
-        .status(400)
-        .json({ message: "No AI recommendations found to convert into goals" });
+      return res.status(400).json({
+        message: "No AI recommendations found to convert into goals",
+      });
     }
 
-    // Step 2: Convert recommendations → goals
     const recommendations = insightsData.data.recommendations;
     const createdGoals = [];
 
@@ -184,7 +189,7 @@ export const createGoalsFromGithubInsights = async (req, res) => {
       goals: createdGoals,
     });
   } catch (error) {
-    console.error("❌ createGoalsFromAIInsights Error:", error);
+    console.error("❌ createGoalsFromGithubInsights Error:", error);
     res.status(500).json({
       message: "Failed to create AI-based GitHub goals",
       error: error.message,
