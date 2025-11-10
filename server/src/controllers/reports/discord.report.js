@@ -1,102 +1,106 @@
 // src/controllers/reports/discord.report.js
 import Connection from "../../models/Connection.js";
 import Goal from "../../models/Goal.js";
-import {
-  sendDiscordEmbed,
-  createWebhook,
-} from "../../services/discord.service.js";
+import { sendDiscordEmbed, createWebhook } from "../../services/discord.service.js";
 import { ENV } from "../../config/env.js";
 import fetch from "node-fetch";
 
-/** ✅ Auto-create webhook if missing, then send summary */
+/** ✅ Send daily goal summary to Discord (auto-create webhook if missing) */
 export const sendDailySummary = async (req, res) => {
   try {
-    const conn = await Connection.findOne({
+    const connection = await Connection.findOne({
       userId: req.user.id,
       platform: "discord",
     });
-    if (!conn || !conn.connected)
+
+    if (!connection || !connection.connected) {
       return res.status(400).json({ message: "Discord not connected" });
+    }
 
-    // 🧠 Step 1: Ensure webhook exists
-    if (!conn.metadata?.webhookUrl) {
-      // Fetch guilds where user authorized the app
-      const guildsRes = await fetch(
-        "https://discord.com/api/users/@me/guilds",
-        {
-          headers: { Authorization: `Bearer ${conn.accessToken}` },
-        }
-      );
-      const guilds = await guildsRes.json();
-      const guild = guilds?.[0];
+    // 🧠 Step 1: Auto-create webhook if missing
+    if (!connection.metadata?.webhookUrl) {
+      console.log("⚙️ No webhook found. Attempting to create one...");
+
+      // 1️⃣ Fetch user's Discord guilds (servers)
+      const guildRes = await fetch("https://discord.com/api/users/@me/guilds", {
+        headers: { Authorization: `Bearer ${connection.accessToken}` },
+      });
+      const guilds = await guildRes.json();
+
+      if (!Array.isArray(guilds)) {
+        console.error("❌ Discord guilds response:", guilds);
+        return res
+          .status(400)
+          .json({ message: "Failed to fetch Discord servers", error: guilds });
+      }
+
+      const guild = guilds[0];
       if (!guild)
-        return res.status(400).json({ message: "No Discord server found" });
+        return res.status(400).json({ message: "No Discord servers found." });
 
-      // Find first text channel
-      const channelsRes = await fetch(
+      // 2️⃣ Fetch channels of the first guild
+      const chRes = await fetch(
         `https://discord.com/api/guilds/${guild.id}/channels`,
         {
           headers: { Authorization: `Bot ${ENV.DISCORD_BOT_TOKEN}` },
         }
       );
-      const channels = await channelsRes.json();
-      const textChannel = channels.find((ch) => ch.type === 0); // text channel
+      const channels = await chRes.json();
 
+      if (!Array.isArray(channels)) {
+        console.error("❌ Discord channels response:", channels);
+        return res
+          .status(400)
+          .json({ message: "Failed to fetch Discord channels", error: channels });
+      }
+
+      const textChannel = channels.find((c) => c.type === 0); // 0 = text
       if (!textChannel)
-        return res.status(400).json({ message: "No text channel available" });
+        return res.status(400).json({ message: "No text channel found." });
 
-      // Create webhook
-      const webhook = await createWebhook(
-        textChannel.id,
-        ENV.DISCORD_BOT_TOKEN
-      );
-      conn.metadata.webhookUrl = webhook.url;
-      await conn.save();
+      // 3️⃣ Create webhook for that text channel
+      const webhook = await createWebhook(textChannel.id, ENV.DISCORD_BOT_TOKEN);
+      connection.metadata.webhookUrl = webhook.url;
+      await connection.save();
+      console.log("✅ Webhook created successfully:", webhook.url);
     }
 
-    // 🧩 Step 2: Gather goals
+    // 🧩 Step 2: Gather user's goals
     const goals = await Goal.find({ userId: req.user.id });
     const completed = goals.filter((g) => g.status === "completed").length;
     const pending = goals.filter((g) => g.status === "active").length;
 
-    // 🧠 Step 3: Generate motivation
-    const prompt = `
-Generate a short motivational quote about daily consistency and progress.
-Return only one sentence.
-    `;
+    // 🧠 Step 3: AI motivational quote (Gemini)
+    const prompt = `Write one short motivational quote for daily growth and consistency.`;
     const aiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
       }
     );
     const aiData = await aiRes.json();
     const motivation =
-      aiData?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Keep building — your consistency creates breakthroughs 💪";
+      aiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
+      "Keep showing up — even small progress counts 🌱";
 
-    // 🧾 Step 4: Create embedded summary
+    // 🧾 Step 4: Create a Discord message embed
     const embed = `
-📘 **AICOO Daily Summary**
-🎯 Goals Completed: **${completed}**
-⏳ Goals Pending: **${pending}**
-💡 Motivation: ${motivation}
+📅 **AICOO Daily Summary**
+🎯 Completed Goals: **${completed}**
+⏳ Pending Goals: **${pending}**
+💬 Motivation: ${motivation}
     `;
 
-    // ✅ Step 5: Send message
-    await sendDiscordEmbed(
-      conn.metadata.webhookUrl,
-      "AICOO Daily Report",
-      embed
-    );
+    // ✅ Step 5: Send to Discord via webhook
+    await sendDiscordEmbed(connection.metadata.webhookUrl, "AICOO Daily Report", embed);
 
     res.status(200).json({ message: "Daily summary sent to Discord ✅" });
   } catch (err) {
     console.error("❌ sendDailySummary Error:", err);
-    res
-      .status(500)
-      .json({ message: "Failed to send summary", error: err.message });
+    res.status(500).json({ message: "Failed to send summary", error: err.message });
   }
 };
