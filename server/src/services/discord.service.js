@@ -20,32 +20,38 @@ export const sendDiscordMessage = async (webhookUrl, content) => {
 /**
  * Send embed-style message.
  */
-export const sendDiscordEmbed = async (webhookUrl, title, description, color = 0x5865f2) => {
-  try {
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: [{ title, description, color }] }),
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("❌ sendDiscordEmbed Error:", err.message);
-    return false;
-  }
+export const sendDiscordEmbed = async (
+  webhookUrl,
+  title,
+  description,
+  color = 0x5865f2
+) => {
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      embeds: [{ title, description, color }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Discord embed failed: ${res.status}`);
+  return true;
 };
 
 /**
  * Create a webhook in a user's Discord channel (using their OAuth access token)
  */
 export const createWebhook = async (channelId, accessToken) => {
-  const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/webhooks`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name: "AICOO Bot" }),
-  });
+  const res = await fetch(
+    `https://discord.com/api/v10/channels/${channelId}/webhooks`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "AICOO Bot" }),
+    }
+  );
 
   if (!res.ok) {
     console.error("❌ Failed to create webhook:", res.status);

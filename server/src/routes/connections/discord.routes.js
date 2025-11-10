@@ -17,6 +17,7 @@ router.get("/callback", discordCallback);
 // Connection Management
 router.get("/status", authMiddleware, checkDiscordConnection);
 router.delete("/disconnect", authMiddleware, disconnectDiscord);
+router.post("/reports/discord/daily", authMiddleware, sendDailySummary);
 
 
 
