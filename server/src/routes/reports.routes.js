@@ -88,6 +88,7 @@ import {
   getCodeforcesAIInsights,
   createGoalsFromCodeforcesInsights,
 } from "../controllers/reports/codeforces.report.js";
+import { sendDailySummary } from "../controllers/reports/discord.report.js";
 
 // import {
 //   getLeetCodeReport,
@@ -222,9 +223,7 @@ router.get("/udemy", authMiddleware, getUdemyReport);
 router.get("/udemy/insights", authMiddleware, getUdemyAIInsights);
 router.post("/udemy/goals", authMiddleware, createGoalsFromUdemyInsights);
 
-// // ==================== 💬 DISCORD ====================
-// router.get("/discord", authMiddleware, getDiscordReport);
-// router.get("/discord/insights", authMiddleware, getDiscordAIInsights);
-// router.post("/discord/goals", authMiddleware, createGoalsFromDiscordInsights);
+// Send message or daily summary (only if connected)
+router.post("/summary", authMiddleware, sendDailySummary);
 
 export default router;
