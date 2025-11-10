@@ -1,4 +1,3 @@
-// src/routes/connections/discord.routes.js
 import express from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import {
@@ -7,10 +6,7 @@ import {
   disconnectDiscord,
   checkDiscordConnection,
 } from "../../controllers/Integrations/discord.controller.js";
-import {
-  sendDailySummary,
-  testDiscordMessage,
-} from "../../controllers/reports/discord.report.js";
+import { sendDailySummary } from "../../controllers/reports/discord.report.js";
 
 const router = express.Router();
 
@@ -19,11 +15,10 @@ router.get("/discord/connect", connectDiscord);
 router.get("/discord/callback", discordCallback);
 
 // Connection Management
-router.delete("/discord/disconnect", authMiddleware, disconnectDiscord);
 router.get("/discord/status", authMiddleware, checkDiscordConnection);
+router.delete("/discord/disconnect", authMiddleware, disconnectDiscord);
 
-// Reports / Bot Messages
-router.post("/reports/discord/test", authMiddleware, testDiscordMessage);
-router.post("/reports/discord/daily", authMiddleware, sendDailySummary);
+// Send message or daily summary (only if connected)
+router.post("/discord/summary", authMiddleware, sendDailySummary);
 
 export default router;

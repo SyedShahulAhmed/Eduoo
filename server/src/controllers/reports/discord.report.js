@@ -1,54 +1,35 @@
-// src/controllers/reports/discord.report.js
-import { sendDiscordEmbed } from "../../services/discord.service.js";
 import Connection from "../../models/Connection.js";
 import Goal from "../../models/Goal.js";
+import { sendDiscordEmbed } from "../../services/discord.service.js";
 
 /**
- * Send daily AI summary to Discord
+ * 5️⃣ Send AI Goals Summary to Discord (only if connected)
  */
 export const sendDailySummary = async (req, res) => {
   try {
-    const conn = await Connection.findOne({ userId: req.user.id, platform: "discord" });
-    if (!conn || !conn.metadata?.webhookUrl)
-      return res.status(400).json({ message: "Discord webhook not set" });
+    const conn = await Connection.findOne({
+      userId: req.user.id,
+      platform: "discord",
+      connected: true,
+    });
+
+    if (!conn || !conn.accessToken)
+      return res.status(400).json({ message: "Discord not connected" });
 
     const goals = await Goal.find({ userId: req.user.id, status: "active" });
-
-    const embedText = goals.length
+    const summary = goals.length
       ? goals.map((g) => `🎯 **${g.title}** — ${g.progress}% done`).join("\n")
-      : "No active goals today.";
+      : "No active goals yet. Keep hustling! 💪";
 
-    await sendDiscordEmbed(
-      conn.metadata.webhookUrl,
-      "📘 AICOO Daily Summary",
-      embedText
-    );
+    // Use a saved webhook if available
+    if (!conn.metadata?.webhookUrl)
+      return res.status(400).json({ message: "No webhook found for this user." });
+
+    await sendDiscordEmbed(conn.metadata.webhookUrl, "📘 AICOO Daily Summary", summary);
 
     res.status(200).json({ message: "Daily summary sent to Discord ✅" });
   } catch (err) {
     console.error("❌ sendDailySummary Error:", err);
     res.status(500).json({ message: "Failed to send Discord summary", error: err.message });
-  }
-};
-
-/**
- * Test message endpoint
- */
-export const testDiscordMessage = async (req, res) => {
-  try {
-    const conn = await Connection.findOne({ userId: req.user.id, platform: "discord" });
-    if (!conn?.metadata?.webhookUrl)
-      return res.status(400).json({ message: "No Discord webhook found" });
-
-    await sendDiscordEmbed(
-      conn.metadata.webhookUrl,
-      "🤖 AICOO Bot Test",
-      "Connection working successfully! 🎉"
-    );
-
-    res.status(200).json({ message: "Test message sent successfully" });
-  } catch (err) {
-    console.error("❌ testDiscordMessage Error:", err);
-    res.status(500).json({ message: "Failed to send test message", error: err.message });
   }
 };
