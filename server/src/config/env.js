@@ -30,7 +30,7 @@ export const ENV = {
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
   GITHUB_CALLBACK_URL: process.env.GITHUB_CALLBACK_URL,
-  SERVER_URL : process.env.SERVER_URL,
+  SERVER_URL: process.env.SERVER_URL,
   // Email (Nodemailer)
   EMAIL: {
     USER: process.env.EMAIL_USER,
@@ -41,6 +41,9 @@ export const ENV = {
   SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET,
   SPOTIFY_REDIRECT_URI: process.env.SPOTIFY_REDIRECT_URI,
   SPOTIFY_SCOPE: process.env.SPOTIFY_SCOPE,
+  DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
+  DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
+  DISCORD_REDIRECT_URI: process.env.DISCORD_REDIRECT_URI,
   // OTP
   OTP_EXPIRY_MINUTES: parseInt(process.env.OTP_EXPIRY_MINUTES || "5"),
   OTP_RESEND_LIMIT: parseInt(process.env.OTP_RESEND_LIMIT || "3"),
