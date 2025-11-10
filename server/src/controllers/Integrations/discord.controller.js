@@ -12,21 +12,25 @@ export const connectDiscord = async (req, res) => {
     const token = req.headers.authorization?.split(" ")[1] || req.query.token;
     if (!token) return res.status(401).json({ message: "Authorization token missing" });
 
-    // ✅ Use fixed redirect URL
+    // ✅ Must be the same redirect URI as in Discord Developer Portal
     const redirectUri = `${ENV.SERVER_URL}/api/connections/discord/callback`;
 
-    // ✅ Pass JWT safely via state (Discord supports it)
+    // ✅ Scopes must be URL encoded (Discord rejects unencoded spaces)
     const scope = encodeURIComponent("identify email guilds webhook.incoming");
+
+    // ✅ Construct final authorization URL
     const authUrl = `https://discord.com/oauth2/authorize?client_id=${ENV.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(
       redirectUri
     )}&response_type=code&scope=${scope}&state=${token}`;
 
+    console.log("🔗 Discord Auth URL:", authUrl);
     return res.redirect(authUrl);
   } catch (err) {
     console.error("❌ connectDiscord Error:", err);
     res.status(500).json({ message: "Discord connect failed", error: err.message });
   }
 };
+
 
 /**
  * 2️⃣ Handle Discord OAuth callback
