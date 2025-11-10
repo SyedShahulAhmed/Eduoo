@@ -35,11 +35,13 @@ export const connectDiscord = async (req, res) => {
 /**
  * 2️⃣ Handle Discord OAuth callback
  */
+import { createWebhook } from "../../services/discord.service.js";
+
 export const discordCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
-    if (!code) return res.status(400).json({ message: "Missing code" });
-    if (!state) return res.status(400).json({ message: "Missing state token" });
+    if (!code || !state)
+      return res.status(400).json({ message: "Missing code or state" });
 
     const decoded = jwt.verify(state, ENV.JWT_SECRET);
     const userId = decoded.id;
@@ -60,36 +62,71 @@ export const discordCallback = async (req, res) => {
     });
 
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token)
-      return res.status(400).json({ message: "Failed to retrieve Discord access token" });
+    const accessToken = tokenData.access_token;
+    if (!accessToken)
+      return res.status(400).json({ message: "Failed to retrieve Discord token" });
 
     // Fetch user info
     const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     const discordUser = await userRes.json();
 
-    // Save Discord connection
+    // ✅ 1️⃣ Try to get user's default guild (server)
+    const guildsRes = await fetch("https://discord.com/api/users/@me/guilds", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const guilds = await guildsRes.json();
+    const firstGuild = guilds?.[0];
+
+    let webhookUrl = null;
+    if (firstGuild) {
+      try {
+        // ✅ 2️⃣ Create webhook in first text channel of that guild
+        const channelsRes = await fetch(
+          `https://discord.com/api/guilds/${firstGuild.id}/channels`,
+          { headers: { Authorization: `Bot ${ENV.DISCORD_BOT_TOKEN}` } }
+        );
+        const channels = await channelsRes.json();
+        const textChannel = channels.find((ch) => ch.type === 0); // type 0 = text
+
+        if (textChannel) {
+          const webhook = await createWebhook(textChannel.id, ENV.DISCORD_BOT_TOKEN);
+          webhookUrl = webhook.url;
+        }
+      } catch (err) {
+        console.error("⚠️ Webhook creation failed:", err.message);
+      }
+    }
+
+    // ✅ 3️⃣ Save connection
     const connection = await Connection.findOneAndUpdate(
       { userId, platform: "discord" },
       {
-        accessToken: tokenData.access_token,
+        accessToken,
         refreshToken: tokenData.refresh_token,
         connected: true,
         username: discordUser.username,
-        metadata: { discordId: discordUser.id },
+        metadata: {
+          discordId: discordUser.id,
+          webhookUrl, // saved here
+        },
         lastSync: new Date(),
       },
       { upsert: true, new: true }
     );
 
-    console.log(`✅ Discord connected for user ${userId} (${discordUser.username})`);
-    return res.status(200).json({ message: "Discord connected successfully ✅", connection });
+    console.log(`✅ Discord connected for user ${userId}`);
+    res.status(200).json({
+      message: "Discord connected successfully ✅",
+      connection,
+    });
   } catch (err) {
     console.error("❌ discordCallback Error:", err);
     res.status(500).json({ message: "Discord OAuth failed", error: err.message });
   }
 };
+
 
 /**
  * 3️⃣ Disconnect Discord

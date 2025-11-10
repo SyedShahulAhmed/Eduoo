@@ -18,7 +18,6 @@ router.get("/callback", discordCallback);
 router.get("/status", authMiddleware, checkDiscordConnection);
 router.delete("/disconnect", authMiddleware, disconnectDiscord);
 
-// Send message or daily summary (only if connected)
-router.post("/summary", authMiddleware, sendDailySummary);
+
 
 export default router;
