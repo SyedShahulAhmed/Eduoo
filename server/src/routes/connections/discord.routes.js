@@ -11,14 +11,14 @@ import { sendDailySummary } from "../../controllers/reports/discord.report.js";
 const router = express.Router();
 
 // OAuth Flow
-router.get("/discord/connect", connectDiscord);
-router.get("/discord/callback", discordCallback);
+router.get("/connect", connectDiscord);
+router.get("/callback", discordCallback);
 
 // Connection Management
-router.get("/discord/status", authMiddleware, checkDiscordConnection);
-router.delete("/discord/disconnect", authMiddleware, disconnectDiscord);
+router.get("/status", authMiddleware, checkDiscordConnection);
+router.delete("/disconnect", authMiddleware, disconnectDiscord);
 
 // Send message or daily summary (only if connected)
-router.post("/discord/summary", authMiddleware, sendDailySummary);
+router.post("/summary", authMiddleware, sendDailySummary);
 
 export default router;
