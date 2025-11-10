@@ -10,7 +10,8 @@ import { createWebhook } from "../../services/discord.service.js";
 export const connectDiscord = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1] || req.query.token;
-    if (!token) return res.status(401).json({ message: "Authorization token missing" });
+    if (!token)
+      return res.status(401).json({ message: "Authorization token missing" });
 
     // ✅ Must be the same redirect URI as in Discord Developer Portal
     const redirectUri = `${ENV.SERVER_URL}/api/connections/discord/callback`;
@@ -27,16 +28,15 @@ export const connectDiscord = async (req, res) => {
     return res.redirect(authUrl);
   } catch (err) {
     console.error("❌ connectDiscord Error:", err);
-    res.status(500).json({ message: "Discord connect failed", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Discord connect failed", error: err.message });
   }
 };
-
 
 /**
  * 2️⃣ Handle Discord OAuth callback
  */
-import { createWebhook } from "../../services/discord.service.js";
-
 export const discordCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
@@ -64,7 +64,9 @@ export const discordCallback = async (req, res) => {
     const tokenData = await tokenRes.json();
     const accessToken = tokenData.access_token;
     if (!accessToken)
-      return res.status(400).json({ message: "Failed to retrieve Discord token" });
+      return res
+        .status(400)
+        .json({ message: "Failed to retrieve Discord token" });
 
     // Fetch user info
     const userRes = await fetch("https://discord.com/api/users/@me", {
@@ -91,7 +93,10 @@ export const discordCallback = async (req, res) => {
         const textChannel = channels.find((ch) => ch.type === 0); // type 0 = text
 
         if (textChannel) {
-          const webhook = await createWebhook(textChannel.id, ENV.DISCORD_BOT_TOKEN);
+          const webhook = await createWebhook(
+            textChannel.id,
+            ENV.DISCORD_BOT_TOKEN
+          );
           webhookUrl = webhook.url;
         }
       } catch (err) {
@@ -123,11 +128,11 @@ export const discordCallback = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ discordCallback Error:", err);
-    res.status(500).json({ message: "Discord OAuth failed", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Discord OAuth failed", error: err.message });
   }
 };
-
-
 /**
  * 3️⃣ Disconnect Discord
  */
@@ -139,7 +144,9 @@ export const disconnectDiscord = async (req, res) => {
     );
     res.status(200).json({ message: "Discord disconnected successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Failed to disconnect Discord", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Failed to disconnect Discord", error: err.message });
   }
 };
 
@@ -148,9 +155,14 @@ export const disconnectDiscord = async (req, res) => {
  */
 export const checkDiscordConnection = async (req, res) => {
   try {
-    const conn = await Connection.findOne({ userId: req.user.id, platform: "discord" });
+    const conn = await Connection.findOne({
+      userId: req.user.id,
+      platform: "discord",
+    });
     if (!conn || !conn.connected)
-      return res.status(200).json({ connected: false, message: "Discord not connected" });
+      return res
+        .status(200)
+        .json({ connected: false, message: "Discord not connected" });
 
     res.status(200).json({
       connected: true,
@@ -159,6 +171,12 @@ export const checkDiscordConnection = async (req, res) => {
       message: "Discord connected ✅",
     });
   } catch (err) {
-    res.status(500).json({ connected: false, message: "Error checking Discord connection", error: err.message });
+    res
+      .status(500)
+      .json({
+        connected: false,
+        message: "Error checking Discord connection",
+        error: err.message,
+      });
   }
 };
