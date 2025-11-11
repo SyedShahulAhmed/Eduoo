@@ -1,16 +1,17 @@
 // src/utils/buildDiscordSummary.js
-import fetch from "node-fetch";
-import { ENV } from "../config/env.js";
 import Connection from "../models/Connection.js";
+import { fetchGitHubData } from "../services/github.service.js";
+import { fetchLeetCodeData } from "../services/leetcode.service.js";
+import { fetchCodeforcesData } from "../services/codeforces.service.js";
+import { fetchCodechefData } from "../services/codechef.service.js";
+import { fetchDuolingoProfile } from "../services/duolingo.service.js";
+import { fetchSpotifyData } from "../services/spotify.service.js";
 
 /**
- * 🧩 Builds a clean, professional daily summary embed for Discord.
- * It aggregates data from all connected platforms via the /api/reports endpoints.
+ * ✨ Build a professional daily productivity summary for Discord.
+ * Uses connected platform tokens and renders a clean, spaced summary.
  */
 export const buildDiscordSummary = async (userId) => {
-  const BASE_URL = ENV.SERVER_URL || "https://eduoo.onrender.com/api/reports";
-
-  // emoji map for each platform
   const icons = {
     github: "💻",
     leetcode: "🧠",
@@ -20,84 +21,123 @@ export const buildDiscordSummary = async (userId) => {
     spotify: "🎵",
   };
 
-  // store fetched summaries
-  const summaryBlocks = [];
-  const activePlatforms = [];
+  const lines = [];
+  const active = [];
   const errors = [];
 
   try {
-    // 1️⃣ get all connected integrations
     const connections = await Connection.find({ userId, connected: true });
+    if (!connections?.length) throw new Error("No connected integrations found.");
 
-    // 2️⃣ fetch each report from backend
     for (const conn of connections) {
-      const platform = conn.platform.toLowerCase();
+      const { platform, accessToken, metadata } = conn;
       const icon = icons[platform] || "📘";
-      const reportUrl = `${BASE_URL}/${platform}`;
 
       try {
-        const res = await fetch(reportUrl, {
-          headers: {
-            Authorization: `Bearer ${conn.userToken || ENV.INTERNAL_API_KEY || ""}`,
-          },
-        });
+        switch (platform) {
+          case "github": {
+            const data = await fetchGitHubData(accessToken);
+            lines.push(
+              `${icon} **GitHub**\n• ${data.recentCommits} commits this month\n• Top languages: ${data.topLanguages.join(", ")}\n• Followers: ${data.followers}`
+            );
+            active.push("GitHub");
+            break;
+          }
 
-        const json = await res.json();
+          case "leetcode": {
+            const data = await fetchLeetCodeData(metadata.username);
+            lines.push(
+              `${icon} **LeetCode**\n• ${data.totalSolved} problems solved\n• ${data.streak || 0}-day streak\n• Acceptance rate: ${data.acceptanceRate}%`
+            );
+            active.push("LeetCode");
+            break;
+          }
 
-        // if report returns AI insight or summary text
-        const summaryText =
-          json?.data?.summary ||
-          json?.data?.insight ||
-          json?.message ||
-          "No new activity today.";
+          case "codeforces": {
+            const data = await fetchCodeforcesData(metadata.username);
+            lines.push(
+              `${icon} **Codeforces**\n• Rating: ${data.rating} (${data.rank})\n• Total Contests: ${data.totalContests}\n• Last Contest: ${data.lastContest?.name || "—"}`
+            );
+            active.push("Codeforces");
+            break;
+          }
 
-        summaryBlocks.push(`${icon} **${capitalize(platform)}:** ${summaryText}`);
-        activePlatforms.push(capitalize(platform));
+          case "codechef": {
+            const data = await fetchCodechefData(metadata.username);
+            lines.push(
+              `${icon} **CodeChef**\n• ${data.stars} | Rating: ${data.rating}\n• Global Rank: ${data.globalRank}\n• Problems Solved: ${data.problemsSolved}`
+            );
+            active.push("CodeChef");
+            break;
+          }
+
+          case "duolingo": {
+            const data = await fetchDuolingoProfile(metadata.username);
+            lines.push(
+              `${icon} **Duolingo**\n• ${data.totalXp} XP | ${data.streak}-day streak\n• Languages: ${data.languages
+                .map((l) => l.language)
+                .slice(0, 3)
+                .join(", ")}`
+            );
+            active.push("Duolingo");
+            break;
+          }
+
+          case "spotify": {
+            const data = await fetchSpotifyData(accessToken);
+            const topArtist = data.topArtists[0] || "Unknown";
+            lines.push(
+              `${icon} **Spotify**\n• ${data.recentTracks.length} tracks played today\n• Top Artist: ${topArtist}\n• Playlists: ${data.stats.totalPlaylists}`
+            );
+            active.push("Spotify");
+            break;
+          }
+
+          default:
+            break;
+        }
       } catch (err) {
         errors.push(`${platform}: ${err.message}`);
       }
     }
 
-    // 3️⃣ Build the main embed message
+    // 🪄 Join all sections with clear spacing
+    const description = lines.length
+      ? lines.join("\n\n")
+      : "⚠️ No recent activity found.";
+
+    // 🧠 Build embed
     const embed = {
       color: 0x5865f2,
       title: "📊 AICOO Daily Productivity Summary",
-      description:
-        summaryBlocks.length > 0
-          ? summaryBlocks.join("\n\n")
-          : "⚠️ No active data available. Connect your platforms to start tracking your progress.",
+      description,
       fields: [
         {
           name: "💡 Motivation",
-          value:
-            randomMotivation(),
+          value: randomMotivation(),
         },
       ],
       footer: {
-        text: `Connected: ${activePlatforms.join(", ") || "None"} • ${new Date().toLocaleTimeString()}`,
+        text: `Connected: ${active.join(", ") || "None"} • ${new Date().toLocaleTimeString()}`,
       },
       timestamp: new Date().toISOString(),
     };
 
-    // 4️⃣ return structured embed
-    return { embed, activePlatforms, errors };
+    return { embed, errors };
   } catch (err) {
     console.error("❌ buildDiscordSummary Error:", err.message);
     throw new Error("Failed to build Discord summary");
   }
 };
 
-/** helper: capitalize first letter */
-const capitalize = (str = "") => str.charAt(0).toUpperCase() + str.slice(1);
-
-/** helper: random motivational line */
+// helper functions
 const randomMotivation = () => {
-  const lines = [
-    "✨ Small progress every day adds up to big results.",
+  const quotes = [
     "🚀 Consistency beats intensity — one step at a time!",
-    "💪 You’re building habits that future you will thank for.",
-    "🔥 Keep the streak alive — even one task counts today!",
-    "🌱 Growth is invisible until it’s undeniable. Keep going!",
+    "✨ Small progress every day adds up to big results.",
+    "🔥 Keep showing up — momentum builds success.",
+    "💪 Today’s small win is tomorrow’s big leap.",
+    "🌱 Growth happens quietly. Keep moving forward.",
   ];
-  return lines[Math.floor(Math.random() * lines.length)];
+  return quotes[Math.floor(Math.random() * quotes.length)];
 };
