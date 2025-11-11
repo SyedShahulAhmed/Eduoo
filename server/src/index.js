@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import Connection from "./models/Connection.js";
-import { buildDiscordSummary } from "../utils/buildDiscordSummary.js";
-import { sendDiscordEmbed } from "../services/discord.service.js";
+import { buildDiscordSummary } from "./utils/buildDiscordSummary.js";
+import { sendDiscordEmbed } from "./services/discord.service.js";
 
 /**
  * 🧠 TEMP: Runs every 1 minute for testing
