@@ -7,7 +7,8 @@ import { sendDiscordEmbed } from "../services/discord.service.js"; // assuming t
  * 🕒 Runs every day at 9 AM IST (3:30 AM UTC)
  * Sends personalized daily summary to all connected Discord users
  */
-cron.schedule("30 3 * * *", async () => {
+export const startDailyDiscordSummary  = () => {
+  cron.schedule("* * * * *", async () => {
   console.log("📢 Running Daily Discord Summary job...");
 
   try {
@@ -38,3 +39,5 @@ cron.schedule("30 3 * * *", async () => {
     console.error("❌ Daily summary cron error:", err.message);
   }
 });
+
+}
