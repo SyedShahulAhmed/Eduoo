@@ -20,21 +20,37 @@ export const sendDiscordMessage = async (webhookUrl, content) => {
 /**
  * Send embed-style message.
  */
-export const sendDiscordEmbed = async (
-  webhookUrl,
-  title,
-  description,
-  color = 0x5865f2a
-) => {
-  const res = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      embeds: [{ title, description, color }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Discord embed failed: ${res.status}`);
-  return true;
+export const sendDiscordEmbed = async (webhookUrl, title, description, color = 0x5865f2) => {
+  try {
+    // Ensure clean text
+    const desc = typeof description === "string" ? description.trim() : String(description);
+
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [
+          {
+            title,
+            description: desc,
+            color: Number(color), // must be decimal integer
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("❌ Discord embed failed:", res.status, text);
+      throw new Error(`Discord embed failed: ${res.status}`);
+    }
+
+    console.log("✅ Embed sent successfully");
+    return true;
+  } catch (err) {
+    console.error("❌ sendDiscordEmbed Error:", err);
+    throw err;
+  }
 };
 
 /**
