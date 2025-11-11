@@ -1,15 +1,16 @@
-// src/utils/buildDiscordSummary.js
 import Connection from "../models/Connection.js";
-import { getGitHubReport } from "../controllers/reports/github.report.js";
-import { getLeetCodeReport } from "../controllers/reports/leetcode.report.js";
-import { getCodeforcesReport } from "../controllers/reports/codeforces.report.js";
-import { getCodechefReport } from "../controllers/reports/codechef.report.js";
-import { getDuolingoReport } from "../controllers/reports/duolingo.report.js";
-import { getSpotifyReport } from "../controllers/reports/spotify.report.js";
+
+// Direct service imports (NOT controllers)
+import { fetchGitHubData } from "../services/github.service.js";
+import { fetchLeetCodeData } from "../services/leetcode.service.js";
+import { fetchCodeforcesData } from "../services/codeforces.service.js";
+import { fetchCodechefData } from "../services/codechef.service.js";
+import { fetchDuolingoProfile } from "../services/duolingo.service.js";
+import { fetchSpotifyData } from "../services/spotify.service.js";
 
 /**
- * 💎 Builds a professional, spaced daily summary embed for Discord.
- * Uses real platform data from backend report controllers.
+ * 💎 Builds a professional, real-data Discord embed summary
+ * using live tokens/usernames from Connection model.
  */
 export const buildDiscordSummary = async (userId) => {
   const icons = {
@@ -27,27 +28,35 @@ export const buildDiscordSummary = async (userId) => {
   try {
     const connections = await Connection.find({ userId, connected: true });
 
+    if (!connections.length)
+      throw new Error("No connected platforms found for this user.");
+
     for (const conn of connections) {
       const platform = conn.platform;
       const icon = icons[platform] || "📘";
 
       try {
         switch (platform) {
+          // ===== GITHUB =====
           case "github": {
-            const { report } = await getGitHubReport({ user: { id: userId } });
+            if (!conn.accessToken) throw new Error("Missing GitHub token.");
+            const data = await fetchGitHubData(conn.accessToken);
             sections.push(
-              `${icon} **GitHub**\n• Commits: ${report.recentCommits}\n• Top Languages: ${report.topLanguages.join(
+              `${icon} **GitHub**\n• Commits: ${data.recentCommits}\n• Top Languages: ${data.topLanguages.join(
                 ", "
-              )}\n• Followers: ${report.followers}`
+              )}\n• Followers: ${data.followers}`
             );
             active.push("GitHub");
             break;
           }
 
+          // ===== LEETCODE =====
           case "leetcode": {
-            const { report } = await getLeetCodeReport({ user: { id: userId } });
+            const username = conn.metadata?.username || conn.username;
+            if (!username) throw new Error("Missing LeetCode username.");
+            const data = await fetchLeetCodeData(username);
             sections.push(
-              `${icon} **LeetCode**\n• Solved: ${report.totalSolved} (Easy: ${report.easySolved}, Medium: ${report.mediumSolved})\n• ${report.streak}-day streak • Acceptance: ${report.acceptanceRate.toFixed(
+              `${icon} **LeetCode**\n• Solved: ${data.totalSolved} (Easy: ${data.easySolved}, Medium: ${data.mediumSolved})\n• ${data.streak || 0}-day streak • Acceptance: ${data.acceptanceRate.toFixed(
                 2
               )}%`
             );
@@ -55,44 +64,55 @@ export const buildDiscordSummary = async (userId) => {
             break;
           }
 
+          // ===== CODEFORCES =====
           case "codeforces": {
-            const { report } = await getCodeforcesReport({ user: { id: userId } });
+            const username = conn.metadata?.username || conn.username;
+            if (!username) throw new Error("Missing Codeforces handle.");
+            const data = await fetchCodeforcesData(username);
             sections.push(
-              `${icon} **Codeforces**\n• Rating: ${report.rating || "Unrated"} (${report.rank})\n• Contests: ${
-                report.totalContests
-              }\n• Last: ${report.lastContest?.name || "—"}`
+              `${icon} **Codeforces**\n• Rating: ${data.rating || "Unrated"} (${data.rank})\n• Contests: ${
+                data.totalContests
+              }\n• Last Contest: ${data.lastContest?.name || "—"}`
             );
             active.push("Codeforces");
             break;
           }
 
+          // ===== CODECHEF =====
           case "codechef": {
-            const { report } = await getCodechefReport({ user: { id: userId } });
+            const username = conn.metadata?.username || conn.username;
+            if (!username) throw new Error("Missing CodeChef username.");
+            const data = await fetchCodechefData(username);
             sections.push(
-              `${icon} **CodeChef**\n• ${report.stars} | Rating: ${report.rating}\n• Solved: ${report.problemsSolved}`
+              `${icon} **CodeChef**\n• ${data.stars} | Rating: ${data.rating}\n• Solved: ${data.problemsSolved}`
             );
             active.push("CodeChef");
             break;
           }
 
+          // ===== DUOLINGO =====
           case "duolingo": {
-            const { report } = await getDuolingoReport({ user: { id: userId } });
-            const langs = report.languages.map((l) => l.language).slice(0, 3).join(", ");
+            const username = conn.metadata?.username || conn.username;
+            if (!username) throw new Error("Missing Duolingo username.");
+            const data = await fetchDuolingoProfile(username);
+            const langs = data.languages.map((l) => l.language).join(", ");
             sections.push(
-              `${icon} **Duolingo**\n• ${report.totalXp.toLocaleString()} XP | ${report.streak}-day streak\n• Languages: ${langs}`
+              `${icon} **Duolingo**\n• ${data.totalXp.toLocaleString()} XP | ${data.streak}-day streak\n• Languages: ${langs}`
             );
             active.push("Duolingo");
             break;
           }
 
+          // ===== SPOTIFY =====
           case "spotify": {
-            const { data } = await getSpotifyReport({ user: { id: userId } });
+            if (!conn.accessToken) throw new Error("Missing Spotify token.");
+            const data = await fetchSpotifyData(conn.accessToken);
             const track = data.currentTrack?.name || "Nothing playing";
             const artist = data.currentTrack?.artist || "";
             sections.push(
-              `${icon} **Spotify**\n• 🎧 Now Playing: ${track} ${artist ? `by ${artist}` : ""}\n• Recent Tracks: ${
-                data.stats.totalRecentTracks
-              }\n• Playlists: ${data.stats.totalPlaylists}`
+              `${icon} **Spotify**\n• 🎧 Now Playing: ${track}${
+                artist ? ` by ${artist}` : ""
+              }\n• Recent Tracks: ${data.stats.totalRecentTracks}\n• Playlists: ${data.stats.totalPlaylists}`
             );
             active.push("Spotify");
             break;
@@ -102,18 +122,19 @@ export const buildDiscordSummary = async (userId) => {
             break;
         }
       } catch (err) {
-        sections.push(`⚠️ **${platform.toUpperCase()}** — Data unavailable (${err.message})`);
+        console.error(`⚠️ ${platform} fetch failed:`, err.message);
+        sections.push(`⚠️ **${platform.toUpperCase()}** — ${err.message}`);
       }
     }
 
-    // Format layout with padding between sections
+    // Format layout with nice spacing
     const description = sections.join("\n\n");
 
-    // Final Discord embed
+    // Build Discord embed
     const embed = {
       color: 0x5865f2,
       title: "📊 AICOO Daily Productivity Summary",
-      description: description || "⚠️ No data found. Connect your integrations first.",
+      description: description || "⚠️ No data available for your integrations.",
       fields: [
         {
           name: "💡 Motivation",
@@ -128,25 +149,24 @@ export const buildDiscordSummary = async (userId) => {
 
     return { embed };
   } catch (err) {
-    console.error("❌ buildDiscordSummary Error:", err.message);
-    throw new Error("Failed to build summary");
+    console.error("❌ buildDiscordSummary Fatal Error:", err.message);
+    throw new Error("Failed to build Discord summary");
   }
 };
 
 // 🎯 Random motivational quotes
 const randomMotivation = () => {
   const quotes = [
-  "🔥 Keep showing up — momentum builds success.",
-  "🌱 Progress, not perfection. Keep growing!",
-  "💪 Every small effort counts toward greatness.",
-  "🚀 Stay consistent. Big wins come from daily focus.",
-  "✨ The journey matters more than the speed.",
-  "🎯 Discipline is doing what needs to be done, even when you don’t feel like it.",
-  "🏆 Success is the sum of small efforts, repeated day in and day out.",
-  "🌅 Each new day is another chance to level up your goals.",
-  "⚡ Action cures fear — start now, refine later.",
-  "💥 You don’t have to be extreme, just consistent.",
-];
-
+    "🔥 Keep showing up — momentum builds success.",
+    "🌱 Progress, not perfection. Keep growing!",
+    "💪 Every small effort counts toward greatness.",
+    "🚀 Stay consistent. Big wins come from daily focus.",
+    "✨ The journey matters more than the speed.",
+    "🎯 Discipline is doing what needs to be done, even when you don’t feel like it.",
+    "🏆 Success is the sum of small efforts, repeated day in and day out.",
+    "🌅 Each new day is another chance to level up your goals.",
+    "⚡ Action cures fear — start now, refine later.",
+    "💥 You don’t have to be extreme, just consistent.",
+  ];
   return quotes[Math.floor(Math.random() * quotes.length)];
 };
