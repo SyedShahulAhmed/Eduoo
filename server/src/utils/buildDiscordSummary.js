@@ -1,6 +1,4 @@
 import Connection from "../models/Connection.js";
-
-// Direct service imports (NOT controllers)
 import { fetchGitHubData } from "../services/github.service.js";
 import { fetchLeetCodeData } from "../services/leetcode.service.js";
 import { fetchCodeforcesData } from "../services/codeforces.service.js";
@@ -8,10 +6,6 @@ import { fetchCodechefData } from "../services/codechef.service.js";
 import { fetchDuolingoProfile } from "../services/duolingo.service.js";
 import { fetchSpotifyData } from "../services/spotify.service.js";
 
-/**
- * 💎 Builds a professional, real-data Discord embed summary
- * using live tokens/usernames from Connection model.
- */
 export const buildDiscordSummary = async (userId) => {
   const icons = {
     github: "💻",
@@ -39,8 +33,9 @@ export const buildDiscordSummary = async (userId) => {
         switch (platform) {
           // ===== GITHUB =====
           case "github": {
-            if (!conn.accessToken) throw new Error("Missing GitHub token.");
-            const data = await fetchGitHubData(conn.accessToken);
+            const token = conn.accessToken;
+            if (!token) throw new Error("Missing GitHub token.");
+            const data = await fetchGitHubData(token);
             sections.push(
               `${icon} **GitHub**\n• Commits: ${data.recentCommits}\n• Top Languages: ${data.topLanguages.join(
                 ", "
@@ -52,7 +47,10 @@ export const buildDiscordSummary = async (userId) => {
 
           // ===== LEETCODE =====
           case "leetcode": {
-            const username = conn.metadata?.username || conn.username;
+            const username =
+              conn.metadata?.username ||
+              conn.profileId ||
+              conn.metadata?.profileId;
             if (!username) throw new Error("Missing LeetCode username.");
             const data = await fetchLeetCodeData(username);
             sections.push(
@@ -66,7 +64,10 @@ export const buildDiscordSummary = async (userId) => {
 
           // ===== CODEFORCES =====
           case "codeforces": {
-            const username = conn.metadata?.username || conn.username;
+            const username =
+              conn.metadata?.username ||
+              conn.profileId ||
+              conn.accessToken;
             if (!username) throw new Error("Missing Codeforces handle.");
             const data = await fetchCodeforcesData(username);
             sections.push(
@@ -80,7 +81,10 @@ export const buildDiscordSummary = async (userId) => {
 
           // ===== CODECHEF =====
           case "codechef": {
-            const username = conn.metadata?.username || conn.username;
+            const username =
+              conn.metadata?.username ||
+              conn.profileId ||
+              conn.accessToken;
             if (!username) throw new Error("Missing CodeChef username.");
             const data = await fetchCodechefData(username);
             sections.push(
@@ -92,7 +96,10 @@ export const buildDiscordSummary = async (userId) => {
 
           // ===== DUOLINGO =====
           case "duolingo": {
-            const username = conn.metadata?.username || conn.username;
+            const username =
+              conn.metadata?.username ||
+              conn.profileId ||
+              conn.metadata?.profileId;
             if (!username) throw new Error("Missing Duolingo username.");
             const data = await fetchDuolingoProfile(username);
             const langs = data.languages.map((l) => l.language).join(", ");
@@ -105,8 +112,9 @@ export const buildDiscordSummary = async (userId) => {
 
           // ===== SPOTIFY =====
           case "spotify": {
-            if (!conn.accessToken) throw new Error("Missing Spotify token.");
-            const data = await fetchSpotifyData(conn.accessToken);
+            const token = conn.accessToken;
+            if (!token) throw new Error("Missing Spotify token.");
+            const data = await fetchSpotifyData(token);
             const track = data.currentTrack?.name || "Nothing playing";
             const artist = data.currentTrack?.artist || "";
             sections.push(
@@ -127,10 +135,8 @@ export const buildDiscordSummary = async (userId) => {
       }
     }
 
-    // Format layout with nice spacing
     const description = sections.join("\n\n");
 
-    // Build Discord embed
     const embed = {
       color: 0x5865f2,
       title: "📊 AICOO Daily Productivity Summary",
