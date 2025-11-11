@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyKeyMiddleware } from "discord-interactions";
-import { ENV } from "../../config/env.js";
+import { ENV } from "../config/env.js";
 
 const router = express.Router();
 
