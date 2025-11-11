@@ -58,31 +58,35 @@ export const sendDiscordEmbed = async (webhookUrl, title, description, color = 0
  */
 export const createWebhook = async (guildId, channelId) => {
   try {
-    // ✅ Use Bot Token, not OAuth token
-    const url = `https://discord.com/api/v10/channels/${channelId}/webhooks`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bot ${ENV.DISCORD_BOT_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: "AICOO Daily Summary",
-        avatar: "https://i.imgur.com/n2s3B4M.png", // optional logo
-      }),
-    });
+    if (!guildId || !channelId)
+      throw new Error("Missing guildId or channelId for webhook creation");
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(`Failed to create webhook: ${error.message || res.statusText}`);
-    }
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${channelId}/webhooks`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bot ${ENV.DISCORD_BOT_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Eduoo Daily Summary",
+          avatar: "https://i.imgur.com/n2s3B4M.png", // optional
+        }),
+      }
+    );
 
     const data = await res.json();
-    console.log("✅ Webhook created:", data.url);
+
+    if (!res.ok) {
+      console.error("❌ Webhook creation failed:", data);
+      throw new Error(data.message || "Failed to create webhook");
+    }
+
+    console.log(`✅ Webhook created successfully in channel ${channelId}: ${data.url}`);
     return data;
   } catch (err) {
-    console.error("❌ Webhook creation failed:", err.message);
+    console.error("❌ createWebhook Error:", err.message);
     return null;
   }
 };
-
