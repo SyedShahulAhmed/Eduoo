@@ -6,6 +6,7 @@ import uploadRoutes from "./routes/upload.routes.js"
 import goalsRoutes from "./routes/goals.routes.js"
 import reportsRoutes from "./routes/reports.routes.js"
 import connectionsRoutes from "./routes/connection.routes.js"
+import discordInteractions from "./routes/discord.interactions.js"
 import cors from "cors";
 const app = express();
 
@@ -25,6 +26,6 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/goals", goalsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/connections", connectionsRoutes);
-
+app.use("/api/discord", express.json(), discordInteractions);
 
 export default app;
