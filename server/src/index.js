@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import Connection from "../models/Connection.js";
+import Connection from "./models/Connection.js";
 import { buildDiscordSummary } from "../utils/buildDiscordSummary.js";
 import { sendDiscordEmbed } from "../services/discord.service.js";
 
