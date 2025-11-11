@@ -54,29 +54,36 @@ export const sendDiscordEmbed = async (webhookUrl, title, description, color = 0
 };
 
 /**
- * Create a webhook in a user's Discord channel (using their OAuth access token)
+ * Create a webhook in the first accessible text channel of the guild
  */
-export const createWebhook = async (channelId, botToken) => {
-  const res = await fetch(
-    `https://discord.com/api/v10/channels/${channelId}/webhooks`,
-    {
+export const createWebhook = async (guildId, channelId, botToken) => {
+  try {
+    console.log("⚙️ Creating Discord webhook...");
+    const url = `https://discord.com/api/v10/channels/${channelId}/webhooks`;
+
+    const res = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bot ${botToken}`, // ✅ Use bot token
+        Authorization: `Bot ${botToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ name: "AICOO Bot" }),
-    }
-  );
+      body: JSON.stringify({
+        name: "Eduoo Summary Bot",
+        avatar: ENV.BOT_AVATAR_URL || null,
+      }),
+    });
 
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("❌ Failed to create webhook:", res.status, text);
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`❌ Failed to create webhook: ${res.status} ${err}`);
+      throw new Error("Failed to create webhook");
+    }
+
+    const webhook = await res.json();
+    console.log(`✅ Webhook created: ${webhook.url}`);
+    return webhook.url; // ✅ Return the webhook URL
+  } catch (err) {
+    console.error("❌ createWebhook error:", err.message);
     throw new Error("Failed to create webhook");
   }
-
-  const webhook = await res.json();
-  console.log(`✅ Webhook created in channel ${channelId}`);
-  return webhook;
 };
-
