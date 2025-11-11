@@ -83,8 +83,10 @@ export const discordCallback = async (req, res) => {
       }
     ).then((r) => r.json());
 
-    const textChannel = channels.find((ch) => ch.type === 0); // type 0 = text channel
-    if (!textChannel) throw new Error("No text channel found for webhook");
+    const textChannel = channels.find(
+      (ch) => ch.type === 0 && ch.permissions && ch.name !== "bot-logs"
+    );
+    if (!textChannel) throw new Error("No suitable text channel found");
 
     // Step 4: Create a webhook in that channel
     console.log("🎯 Attempting to create webhook in channel:", textChannel?.id);
@@ -157,11 +159,9 @@ export const checkDiscordConnection = async (req, res) => {
       message: "Discord connected ✅",
     });
   } catch (err) {
-    res
-      .status(500)
-      .json({
-        message: "Error checking Discord connection",
-        error: err.message,
-      });
+    res.status(500).json({
+      message: "Error checking Discord connection",
+      error: err.message,
+    });
   }
 };
