@@ -1,7 +1,10 @@
 // src/controllers/reports/discord.report.js
 import Connection from "../../models/Connection.js";
 import Goal from "../../models/Goal.js";
-import { sendDiscordEmbed, createWebhook } from "../../services/discord.service.js";
+import {
+  sendDiscordEmbed,
+  createWebhook,
+} from "../../services/discord.service.js";
 import { ENV } from "../../config/env.js";
 import fetch from "node-fetch";
 
@@ -51,7 +54,10 @@ export const sendDailySummary = async (req, res) => {
         console.error("❌ Discord channels response:", channels);
         return res
           .status(400)
-          .json({ message: "Failed to fetch Discord channels", error: channels });
+          .json({
+            message: "Failed to fetch Discord channels",
+            error: channels,
+          });
       }
 
       const textChannel = channels.find((c) => c.type === 0); // 0 = text
@@ -59,7 +65,11 @@ export const sendDailySummary = async (req, res) => {
         return res.status(400).json({ message: "No text channel found." });
 
       // 3️⃣ Create webhook for that text channel
-      const webhook = await createWebhook(textChannel.id, ENV.DISCORD_BOT_TOKEN);
+      const webhook = await createWebhook(
+        textChannel.id,
+        ENV.DISCORD_BOT_TOKEN
+      );
+
       connection.metadata.webhookUrl = webhook.url;
       await connection.save();
       console.log("✅ Webhook created successfully:", webhook.url);
@@ -96,11 +106,17 @@ export const sendDailySummary = async (req, res) => {
     `;
 
     // ✅ Step 5: Send to Discord via webhook
-    await sendDiscordEmbed(connection.metadata.webhookUrl, "AICOO Daily Report", embed);
+    await sendDiscordEmbed(
+      connection.metadata.webhookUrl,
+      "AICOO Daily Report",
+      embed
+    );
 
     res.status(200).json({ message: "Daily summary sent to Discord ✅" });
   } catch (err) {
     console.error("❌ sendDailySummary Error:", err);
-    res.status(500).json({ message: "Failed to send summary", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Failed to send summary", error: err.message });
   }
 };

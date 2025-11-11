@@ -40,13 +40,13 @@ export const sendDiscordEmbed = async (
 /**
  * Create a webhook in a user's Discord channel (using their OAuth access token)
  */
-export const createWebhook = async (channelId, accessToken) => {
+export const createWebhook = async (channelId, botToken) => {
   const res = await fetch(
     `https://discord.com/api/v10/channels/${channelId}/webhooks`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bot ${botToken}`, // ✅ Use bot token
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ name: "AICOO Bot" }),
@@ -54,7 +54,8 @@ export const createWebhook = async (channelId, accessToken) => {
   );
 
   if (!res.ok) {
-    console.error("❌ Failed to create webhook:", res.status);
+    const text = await res.text();
+    console.error("❌ Failed to create webhook:", res.status, text);
     throw new Error("Failed to create webhook");
   }
 
@@ -62,3 +63,4 @@ export const createWebhook = async (channelId, accessToken) => {
   console.log(`✅ Webhook created in channel ${channelId}`);
   return webhook;
 };
+
