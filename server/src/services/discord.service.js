@@ -1,7 +1,8 @@
 import fetch from "node-fetch";
+import { ENV } from "../config/env.js";
 
 /**
- * Send simple message to a Discord webhook.
+ * ✅ Send a plain text message to a Discord webhook
  */
 export const sendDiscordMessage = async (webhookUrl, content) => {
   try {
@@ -18,11 +19,10 @@ export const sendDiscordMessage = async (webhookUrl, content) => {
 };
 
 /**
- * Send embed-style message.
+ * ✅ Send a styled embed message
  */
 export const sendDiscordEmbed = async (webhookUrl, title, description, color = 0x5865f2) => {
   try {
-    // Ensure clean text
     const desc = typeof description === "string" ? description.trim() : String(description);
 
     const res = await fetch(webhookUrl, {
@@ -33,7 +33,7 @@ export const sendDiscordEmbed = async (webhookUrl, title, description, color = 0
           {
             title,
             description: desc,
-            color: Number(color), // must be decimal integer
+            color: Number(color),
           },
         ],
       }),
@@ -48,17 +48,17 @@ export const sendDiscordEmbed = async (webhookUrl, title, description, color = 0
     console.log("✅ Embed sent successfully");
     return true;
   } catch (err) {
-    console.error("❌ sendDiscordEmbed Error:", err);
-    throw err;
+    console.error("❌ sendDiscordEmbed Error:", err.message);
+    return false;
   }
 };
 
 /**
- * Create a webhook in the first accessible text channel of the guild
+ * ✅ Create a webhook using the bot token (permanent and stable)
  */
 export const createWebhook = async (guildId, channelId) => {
   try {
-    console.log("🎯 Trying to create webhook with Bot token...");
+    console.log("🎯 Attempting to create webhook...");
     console.log("Guild:", guildId, "Channel:", channelId);
 
     const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/webhooks`, {
