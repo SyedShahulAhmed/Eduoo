@@ -224,6 +224,6 @@ router.get("/udemy/insights", authMiddleware, getUdemyAIInsights);
 router.post("/udemy/goals", authMiddleware, createGoalsFromUdemyInsights);
 
 // Send message or daily summary (only if connected)
-router.post("/summary", authMiddleware, sendDailySummary);
+router.post("/discord/daily", authMiddleware, sendDailySummary);
 
 export default router;

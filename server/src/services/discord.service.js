@@ -24,7 +24,7 @@ export const sendDiscordEmbed = async (
   webhookUrl,
   title,
   description,
-  color = 0x5865f2
+  color = 0x5865f2a
 ) => {
   const res = await fetch(webhookUrl, {
     method: "POST",
