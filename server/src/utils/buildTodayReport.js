@@ -1,15 +1,15 @@
-import { getGitHubReport } from "../controllers/reports/github.report.js";
-import { getLeetCodeReport } from "../controllers/reports/leetcode.report.js";
-import { getDuolingoReport } from "../controllers/reports/duolingo.report.js";
-import { getSpotifyReport } from "../controllers/reports/spotify.report.js";
+import { fetchDuolingoProfile } from "../services/duolingo.service";
+import { fetchGitHubData } from "../services/github.service";
+import { fetchLeetCodeData } from "../services/leetcode.service";
+import { fetchSpotifyData } from "../services/spotify.service";
 
 export const buildTodayReport = async (userId) => {
   try {
     const [gitHub, leetCode, duolingo, spotify] = await Promise.allSettled([
-      getGitHubReport({ user: { id: userId } }),
-      getLeetCodeReport({ user: { id: userId } }),
-      getDuolingoReport({ user: { id: userId } }),
-      getSpotifyReport({ user: { id: userId } }),
+      fetchGitHubData({ user: { id: userId } }),
+      fetchLeetCodeData({ user: { id: userId } }),
+      fetchDuolingoProfile({ user: { id: userId } }),
+      fetchSpotifyData({ user: { id: userId } }),
     ]);
 
     const today = new Date().toISOString().split("T")[0];

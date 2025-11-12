@@ -1,8 +1,12 @@
+import { fetchDuolingoProfile } from "../services/duolingo.service";
+import { fetchGitHubData } from "../services/github.service";
+import { fetchLeetCodeData } from "../services/leetcode.service";
+
 export const buildStreakSummary = async (userId) => {
   try {
-    const duolingo = await fetchDuolingoReport(userId);
-    const leetcode = await fetchLeetCodeReport(userId);
-    const github = await fetchGitHubReport(userId);
+    const duolingo = await fetchDuolingoProfile(userId);
+    const leetcode = await fetchLeetCodeData(userId);
+    const github = await fetchGitHubData(userId);
 
     const desc = `
 🗣️ **Duolingo:** ${duolingo.report.streak}-day streak ✅
