@@ -1,30 +1,44 @@
-import { fetchDuolingoProfile } from "../services/duolingo.service.js";
+import Connection from "../models/Connection.js";
 import { fetchGitHubData } from "../services/github.service.js";
 import { fetchLeetCodeData } from "../services/leetcode.service.js";
+import { fetchDuolingoProfile } from "../services/duolingo.service.js";
 import { fetchSpotifyData } from "../services/spotify.service.js";
 
 export const buildTodayReport = async (userId) => {
   try {
+    const connections = await Connection.find({ userId, connected: true });
+    const connMap = Object.fromEntries(connections.map(c => [c.platform, c]));
+
+    // Pull credentials/usernames from DB
+    const githubToken = connMap.github?.accessToken;
+    const leetcodeUser = connMap.leetcode?.profileId;
+    const duolingoUser = connMap.duolingo?.metadata?.profileId;
+    const spotifyToken = connMap.spotify?.accessToken;
+
     const [gitHub, leetCode, duolingo, spotify] = await Promise.allSettled([
-      fetchGitHubData({ user: { id: userId } }),
-      fetchLeetCodeData({ user: { id: userId } }),
-      fetchDuolingoProfile({ user: { id: userId } }),
-      fetchSpotifyData({ user: { id: userId } }),
+      githubToken ? fetchGitHubData(githubToken) : null,
+      leetcodeUser ? fetchLeetCodeData(leetcodeUser) : null,
+      duolingoUser ? fetchDuolingoProfile(duolingoUser) : null,
+      spotifyToken ? fetchSpotifyData(spotifyToken) : null,
     ]);
 
     const today = new Date().toISOString().split("T")[0];
 
     const commitsToday =
-      gitHub.value?.report?.recentActivity?.includes(today) ? 1 : 0;
-    const lcSolvedToday = Object.entries(
-      JSON.parse(leetCode.value?.report?.submissionCalendar || "{}")
-    ).filter(([ts]) => {
-      const date = new Date(ts * 1000).toISOString().split("T")[0];
-      return date === today;
-    }).length;
+      gitHub.value?.recentActivity?.includes(today) ? 1 : 0;
 
-    const xpToday = duolingo.value?.report?.streak ? "✅ Continued" : "❌ Missed";
-    const spotifyTracks = spotify.value?.data?.stats?.totalRecentTracks || 0;
+    const lcSolvedToday = leetCode.value
+      ? Object.entries(
+          JSON.parse(leetCode.value.submissionCalendar || "{}")
+        ).filter(([ts]) => {
+          const date = new Date(ts * 1000).toISOString().split("T")[0];
+          return date === today;
+        }).length
+      : 0;
+
+    const xpToday = duolingo.value?.streak ? "✅ Continued" : "❌ Missed";
+    const spotifyTracks =
+      spotify.value?.stats?.totalRecentTracks ?? 0;
 
     const desc = `
 📅 **Today's Activity**
