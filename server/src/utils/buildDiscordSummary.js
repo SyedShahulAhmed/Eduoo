@@ -1,12 +1,11 @@
 import Connection from "../models/Connection.js";
-import {
-  fetchGitHubData,
-  fetchLeetCodeData,
-  fetchCodeforcesData,
-  fetchCodechefData,
-  fetchDuolingoProfile,
-  fetchSpotifyData,
-} from "../services/index.js"; // if you export them together, else keep separate imports
+import { fetchCodechefData } from "../services/codechef.service.js";
+import { fetchCodeforcesData } from "../services/codeforces.service.js";
+import { fetchDuolingoProfile } from "../services/duolingo.service.js";
+import { fetchGitHubData } from "../services/github.service.js";
+import { fetchLeetCodeData } from "../services/leetcode.service.js";
+import { fetchSpotifyData } from "../services/spotify.service.js";
+
 
 export const buildDiscordSummary = async (userId) => {
   const icons = {
