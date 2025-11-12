@@ -12,6 +12,7 @@ export const buildStreakSummary = async (userId) => {
     const githubToken = connMap.github?.accessToken;
     const leetcodeUser = connMap.leetcode?.profileId;
 
+    // Parallel fetch
     const [duoRes, gitRes, lcRes] = await Promise.allSettled([
       duolingoUser ? fetchDuolingoProfile(duolingoUser) : null,
       githubToken ? fetchGitHubData(githubToken) : null,
@@ -22,7 +23,9 @@ export const buildStreakSummary = async (userId) => {
     const github = gitRes.status === "fulfilled" ? gitRes.value : null;
     const leetcode = lcRes.status === "fulfilled" ? lcRes.value : null;
 
-    const duoStreak = duolingo?.streak ?? 0;
+    // Adapted to new JSON shapes
+    const duolingoData = duolingo?.report;
+    const duoStreak = duolingoData?.streak ?? 0;
     const gitStreak =
       github?.commitStreak?.current ?? github?.recentCommits ?? 0;
     const lcStreak = leetcode?.streak ?? 0;

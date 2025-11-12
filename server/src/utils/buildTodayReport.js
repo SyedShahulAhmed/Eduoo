@@ -14,7 +14,7 @@ export const buildTodayReport = async (userId) => {
     const duolingoUser = connMap.duolingo?.metadata?.profileId;
     const spotifyToken = connMap.spotify?.accessToken;
 
-    // Fetch data in parallel safely
+    // Fetch all data in parallel
     const [gitHubRes, leetCodeRes, duolingoRes, spotifyRes] = await Promise.allSettled([
       githubToken ? fetchGitHubData(githubToken) : null,
       leetcodeUser ? fetchLeetCodeData(leetcodeUser) : null,
@@ -29,8 +29,11 @@ export const buildTodayReport = async (userId) => {
 
     const today = new Date().toISOString().split("T")[0];
 
-    const commitsToday = gitHub?.recentCommits > 0 ? gitHub.recentCommits : 0;
+    // GitHub
+    const commitsToday =
+      gitHub?.recentCommits && gitHub?.recentCommits > 0 ? gitHub.recentCommits : 0;
 
+    // LeetCode
     const lcSolvedToday = leetCode?.submissionCalendar
       ? Object.entries(JSON.parse(leetCode.submissionCalendar)).filter(([ts]) => {
           const date = new Date(ts * 1000).toISOString().split("T")[0];
@@ -38,11 +41,16 @@ export const buildTodayReport = async (userId) => {
         }).length
       : 0;
 
+    // Duolingo (from duolingo.report)
+    const duolingoData = duolingo?.report;
     const duolingoStreak =
-      duolingo?.streak && duolingo?.streak > 0 ? "✅ Continued" : "❌ Missed";
+      duolingoData?.streak && duolingoData?.streak > 0 ? "✅ Continued" : "❌ Missed";
 
-    const spotifyTracks = spotify?.stats?.totalRecentTracks ?? 0;
+    // Spotify (from spotify.data)
+    const spotifyData = spotify?.data;
+    const spotifyTracks = spotifyData?.stats?.totalRecentTracks ?? 0;
 
+    // 🧾 Description
     const desc = `
 📅 **Today's Activity**
 💻 GitHub — ${commitsToday} commit${commitsToday !== 1 ? "s" : ""}
