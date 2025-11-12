@@ -5,38 +5,62 @@ import { fetchLeetCodeData } from "../services/leetcode.service.js";
 
 export const buildStreakSummary = async (userId) => {
   try {
-    // 🧠 1️⃣ Load all user connections
     const connections = await Connection.find({ userId, connected: true });
-    const connMap = Object.fromEntries(connections.map(c => [c.platform, c]));
+    const connMap = Object.fromEntries(connections.map((c) => [c.platform, c]));
 
-    // 🎯 2️⃣ Extract usernames / tokens from DB
     const duolingoUser = connMap.duolingo?.metadata?.profileId;
     const githubToken = connMap.github?.accessToken;
     const leetcodeUser = connMap.leetcode?.profileId;
 
-    // 3️⃣ Parallel API calls (skip missing platforms)
-    const [duolingo, github, leetcode] = await Promise.allSettled([
+    // 🚀 Run all fetches in parallel — safely
+    const [duolingoRes, githubRes, leetcodeRes] = await Promise.allSettled([
       duolingoUser ? fetchDuolingoProfile(duolingoUser) : null,
       githubToken ? fetchGitHubData(githubToken) : null,
       leetcodeUser ? fetchLeetCodeData(leetcodeUser) : null,
     ]);
 
-    // 4️⃣ Extract streak values safely
-    const duoStreak = duolingo.value?.streak || 0;
-    const gitStreak = github.value?.commitStreak?.current || 0;
-    const lcStreak = leetcode.value?.streak || 0;
+    // 🔒 Extract data safely
+    const duolingoData =
+      duolingoRes.status === "fulfilled" ? duolingoRes.value : null;
+    const githubData =
+      githubRes.status === "fulfilled" ? githubRes.value : null;
+    const leetcodeData =
+      leetcodeRes.status === "fulfilled" ? leetcodeRes.value : null;
 
-    // 5️⃣ Format rich output
-    const desc = `
-🗣️ **Duolingo:** ${duoStreak}-day streak ${duoStreak > 0 ? "✅" : "❌"}
-💻 **GitHub:** ${gitStreak}-day commit streak ${gitStreak > 0 ? "✅" : "❌"}
-🧠 **LeetCode:** ${lcStreak}-day coding streak ${lcStreak > 0 ? "✅" : "❌"}
-`;
+    // 🧮 Fallbacks
+    const duoStreak = duolingoData?.streak ?? 0;
+    const gitStreak =
+      githubData?.commitStreak?.current ?? githubData?.recentCommits ?? 0;
+    const lcStreak = leetcodeData?.streak ?? 0;
+
+    // 🧾 Build description dynamically
+    const sections = [];
+    if (duolingoUser)
+      sections.push(
+        `🗣️ **Duolingo:** ${duoStreak}-day streak ${
+          duoStreak > 0 ? "✅" : "❌"
+        }`
+      );
+    if (githubToken)
+      sections.push(
+        `💻 **GitHub:** ${gitStreak}-day commit streak ${
+          gitStreak > 0 ? "✅" : "❌"
+        }`
+      );
+    if (leetcodeUser)
+      sections.push(
+        `🧠 **LeetCode:** ${lcStreak}-day coding streak ${
+          lcStreak > 0 ? "✅" : "❌"
+        }`
+      );
 
     const embed = {
       color: 0x57f287,
       title: "🔥 Your Streak Tracker",
-      description: desc.trim(),
+      description:
+        sections.length > 0
+          ? sections.join("\n")
+          : "⚠️ No connected platforms with streak data.",
       footer: { text: "Keep the fire alive! • AICOO" },
       timestamp: new Date().toISOString(),
     };
