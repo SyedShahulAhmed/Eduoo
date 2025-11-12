@@ -1,12 +1,12 @@
 import express from "express";
-import helmet from "helmet"
-import authRoutes from "./routes/auth.routes.js"
-import userRoutes from "./routes/user.routes.js"
-import uploadRoutes from "./routes/upload.routes.js"
-import goalsRoutes from "./routes/goals.routes.js"
-import reportsRoutes from "./routes/reports.routes.js"
-import connectionsRoutes from "./routes/connection.routes.js"
-import discordInteractions from "./routes/discord.interactions.js"
+import helmet from "helmet";
+import authRoutes from "./routes/auth.routes.js";
+import userRoutes from "./routes/user.routes.js";
+import uploadRoutes from "./routes/upload.routes.js";
+import goalsRoutes from "./routes/goals.routes.js";
+import reportsRoutes from "./routes/reports.routes.js";
+import connectionsRoutes from "./routes/connection.routes.js";
+import discordInteractions from "./routes/discord.interactions.js";
 import cors from "cors";
 const app = express();
 
@@ -14,10 +14,17 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 app.use(helmet());
-
-app.get('/',(req,res) =>{
-    res.send("AICOO SERVER WORKING")
-})
+// ✅ Apply JSON middleware to everything EXCEPT Discord interactions
+app.use((req, res, next) => {
+  if (req.originalUrl === "/api/discord/interactions") {
+    next(); // skip express.json() for Discord verification
+  } else {
+    express.json()(req, res, next);
+  }
+});
+app.get("/", (req, res) => {
+  res.send("AICOO SERVER WORKING");
+});
 
 // Routes
 app.use("/api/auth", authRoutes);
