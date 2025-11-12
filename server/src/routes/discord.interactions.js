@@ -1,131 +1,207 @@
 import express from "express";
 import { verifyKeyMiddleware } from "discord-interactions";
 import { ENV } from "../config/env.js";
+import Connection from "../models/Connection.js";
+import Goal from "../models/Goal.js";
+
 import { buildDiscordSummary } from "../utils/buildDiscordSummary.js";
 import { buildTodayReport } from "../utils/buildTodayReport.js";
 import { buildStreakSummary } from "../utils/buildStreakSummary.js";
 import { buildHelpMessage } from "../utils/buildHelpMessage.js";
-import Connection from "../models/Connection.js";
-import Goal from "../models/Goal.js";
-import fetch from "node-fetch";
 
 const router = express.Router();
 
-// Helper: Send follow-up (edit reply)
-const sendFollowup = async (interactionToken, embed) => {
-  try {
-    await fetch(`https://discord.com/api/v10/webhooks/${ENV.DISCORD_CLIENT_ID}/${interactionToken}/messages/@original`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: [embed] }),
-    });
-  } catch (err) {
-    console.error("❌ Failed to send follow-up:", err.message);
-  }
-};
-
+/**
+ * Handles all Discord slash commands.
+ * Uses verifyKeyMiddleware to validate Discord requests.
+ */
 router.post(
-  "/interactions",
+  "/",
   verifyKeyMiddleware(ENV.DISCORD_PUBLIC_KEY),
   async (req, res) => {
-    const interaction = req.body;
+    let interaction = req.body;
 
-    // ✅ Discord verification ping
-    if (interaction.type === 1) return res.json({ type: 1 });
+    try {
+      // Some body parsers might leave req.body as a buffer
+      if (Buffer.isBuffer(req.body)) {
+        interaction = JSON.parse(req.body.toString());
+      }
+    } catch (err) {
+      console.error("❌ Failed to parse interaction body:", err);
+      return res.status(400).json({ error: "Invalid request body" });
+    }
 
-    if (interaction.type === 2) {
-      const command = interaction.data.name;
-      const discordId = interaction.member.user.id;
+    // ✅ Discord PING verification
+    if (interaction?.type === 1) {
+      return res.json({ type: 1 });
+    }
+
+    // ✅ Slash command handler
+    if (interaction?.type === 2) {
+      const command = interaction.data?.name;
+      const discordId = interaction.member?.user?.id;
 
       console.log(`🎯 Slash Command Received: /${command} from ${discordId}`);
 
-      // ✅ Send immediate "thinking..." response to avoid timeout
-      res.json({
-        type: 5, // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
-      });
-
       try {
+        // ✅ Find linked user via Discord ID
         const conn = await Connection.findOne({
           "metadata.discordId": discordId,
           platform: "discord",
         });
 
         if (!conn) {
-          const embed = {
-            color: 0xff0000,
-            title: "❌ Not Connected",
-            description: "Please connect your Discord account first in AICOO.",
-          };
-          return sendFollowup(interaction.token, embed);
+          return res.json({
+            type: 4,
+            data: {
+              content:
+                "❌ Please connect your Discord account first via the Eduoo app.",
+            },
+          });
         }
 
-        let embed;
+        const userId = conn.userId;
 
+        // 🧩 Command Routing
         switch (command) {
+          /** 1️⃣ /getsummary — Full report */
           case "getsummary": {
-            console.log("⚙️ Building full summary...");
-            ({ embed } = await buildDiscordSummary(conn.userId));
-            break;
+            try {
+              const { embed } = await withTimeout(
+                buildDiscordSummary(userId),
+                10_000,
+                "Summary generation timed out."
+              );
+              return res.json({ type: 4, data: { embeds: [embed] } });
+            } catch (err) {
+              console.error("❌ getsummary error:", err.message);
+              return res.json({
+                type: 4,
+                data: { content: `⚠️ Failed to generate summary: ${err.message}` },
+              });
+            }
           }
 
+          /** 2️⃣ /todayreport — Today's snapshot */
           case "todayreport": {
-            console.log("⚙️ Building today's report...");
-            ({ embed } = await buildTodayReport(conn.userId));
-            break;
+            try {
+              const { embed } = await withTimeout(
+                buildTodayReport(userId),
+                10_000,
+                "Today's report timed out."
+              );
+              return res.json({ type: 4, data: { embeds: [embed] } });
+            } catch (err) {
+              console.error("❌ todayreport error:", err.message);
+              return res.json({
+                type: 4,
+                data: { content: `⚠️ Failed to generate today's report.` },
+              });
+            }
           }
 
+          /** 3️⃣ /streak — Active streaks */
           case "streak": {
-            console.log("⚙️ Building streak summary...");
-            ({ embed } = await buildStreakSummary(conn.userId));
-            break;
+            try {
+              const { embed } = await withTimeout(
+                buildStreakSummary(userId),
+                8_000,
+                "Streak summary timed out."
+              );
+              return res.json({ type: 4, data: { embeds: [embed] } });
+            } catch (err) {
+              console.error("❌ streak error:", err.message);
+              return res.json({
+                type: 4,
+                data: { content: `⚠️ Failed to fetch streak summary.` },
+              });
+            }
           }
 
+          /** 4️⃣ /goals — Active + completed goals */
           case "goals": {
-            const goals = await Goal.find({ userId: conn.userId });
-            if (!goals.length) {
-              embed = {
-                color: 0xffa500,
-                title: "🎯 Your Goals",
-                description: "You don’t have any goals yet. Set one in the app!",
-              };
-            } else {
+            try {
+              const goals = await Goal.find({ userId });
+
+              if (!goals.length) {
+                return res.json({
+                  type: 4,
+                  data: {
+                    embeds: [
+                      {
+                        color: 0xffa500,
+                        title: "🎯 Your Goals",
+                        description:
+                          "You don’t have any goals yet. Set one in the app!",
+                        footer: { text: "AICOO Goal Tracker" },
+                      },
+                    ],
+                  },
+                });
+              }
+
               const completed = goals.filter((g) => g.status === "completed");
               const active = goals.filter((g) => g.status === "active");
-              embed = {
+
+              const desc = `
+✅ **Completed:** ${completed.length}
+⏳ **Active:** ${active.length}
+📅 **Total Goals:** ${goals.length}
+`;
+
+              const embed = {
                 color: 0x57f287,
                 title: "🎯 Your Goal Progress",
-                description: `✅ **Completed:** ${completed.length}\n⏳ **Active:** ${active.length}`,
+                description: desc,
+                footer: { text: "AICOO Productivity Bot" },
+                timestamp: new Date().toISOString(),
               };
+
+              return res.json({ type: 4, data: { embeds: [embed] } });
+            } catch (err) {
+              console.error("❌ goals command error:", err.message);
+              return res.json({
+                type: 4,
+                data: { content: `⚠️ Failed to fetch goals.` },
+              });
             }
-            break;
           }
 
+          /** 5️⃣ /help — Command guide */
           case "help": {
-            ({ embed } = buildHelpMessage());
-            break;
+            const { embed } = buildHelpMessage();
+            return res.json({ type: 4, data: { embeds: [embed] } });
           }
 
-          default: {
-            embed = {
-              color: 0xff0000,
-              title: "🤔 Unknown Command",
-              description: "Try `/help` for available commands.",
-            };
-          }
+          /** Unknown command fallback */
+          default:
+            return res.json({
+              type: 4,
+              data: { content: "🤔 Unknown command. Try `/help`." },
+            });
         }
-
-        await sendFollowup(interaction.token, embed);
       } catch (err) {
-        console.error("❌ Discord Command Error:", err);
-        const embed = {
-          color: 0xff0000,
-          title: "❌ Error",
-          description: err.message || "An unexpected error occurred.",
-        };
-        await sendFollowup(interaction.token, embed);
+        console.error("❌ Discord Command Handler Error:", err.message);
+        return res.json({
+          type: 4,
+          data: { content: `❌ Internal error: ${err.message}` },
+        });
       }
     }
+
+    // If we reach here, invalid payload
+    return res.status(400).send("Invalid interaction request.");
   }
 );
+
+/** 🕒 Utility: Timeout wrapper to avoid Discord 3s+ timeout */
+const withTimeout = (promise, ms, msg) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(msg || "Timed out")), ms)
+    ),
+  ]);
+};
 
 export default router;
