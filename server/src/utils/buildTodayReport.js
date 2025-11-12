@@ -1,7 +1,7 @@
-import { fetchDuolingoProfile } from "../services/duolingo.service";
-import { fetchGitHubData } from "../services/github.service";
-import { fetchLeetCodeData } from "../services/leetcode.service";
-import { fetchSpotifyData } from "../services/spotify.service";
+import { fetchDuolingoProfile } from "../services/duolingo.service.js";
+import { fetchGitHubData } from "../services/github.service.js";
+import { fetchLeetCodeData } from "../services/leetcode.service.js";
+import { fetchSpotifyData } from "../services/spotify.service.js";
 
 export const buildTodayReport = async (userId) => {
   try {

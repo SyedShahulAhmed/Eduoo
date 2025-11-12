@@ -1,6 +1,6 @@
-import { fetchDuolingoProfile } from "../services/duolingo.service";
-import { fetchGitHubData } from "../services/github.service";
-import { fetchLeetCodeData } from "../services/leetcode.service";
+import { fetchDuolingoProfile } from "../services/duolingo.service.js";
+import { fetchGitHubData } from "../services/github.service.js";
+import { fetchLeetCodeData } from "../services/leetcode.service.js";
 
 export const buildStreakSummary = async (userId) => {
   try {
