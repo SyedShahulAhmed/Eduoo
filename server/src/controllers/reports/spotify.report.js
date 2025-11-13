@@ -3,6 +3,7 @@ import Connection from "../../models/Connection.js";
 import Goal from "../../models/Goal.js";
 import { ENV } from "../../config/env.js";
 import { fetchSpotifyData } from "../../services/spotify.service.js";
+import { refreshSpotifyToken } from "../../middlewares/refreshSpotifyToken.js";
 
 export const getSpotifyReport = async (req, res) => {
   try {
@@ -10,15 +11,21 @@ export const getSpotifyReport = async (req, res) => {
       userId: req.user.id,
       platform: "spotify",
     });
-    if (!connection || !connection.accessToken)
+
+    if (!connection)
       return res.status(400).json({ message: "Spotify not connected" });
 
-    const data = await fetchSpotifyData(connection.accessToken);
+    // 🔥 fix: refresh expired access token
+    const token = await refreshSpotifyToken(connection);
+
+    const data = await fetchSpotifyData(token);
+
     res.status(200).json({ message: "Spotify report generated", data });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Spotify report failed", error: error.message });
+    res.status(500).json({
+      message: "Spotify report failed",
+      error: error.message,
+    });
   }
 };
 
