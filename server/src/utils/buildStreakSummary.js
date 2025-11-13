@@ -10,75 +10,55 @@ export const buildStreakSummary = async (userId) => {
     const githubToken = connMap.github?.accessToken;
     const leetcodeUser = connMap.leetcode?.profileId;
 
-    // Fetch latest data in parallel
     const [gitRes, lcRes] = await Promise.allSettled([
       githubToken ? fetchGitHubData(githubToken) : null,
       leetcodeUser ? fetchLeetCodeData(leetcodeUser) : null,
     ]);
 
-    const github = gitRes.status === "fulfilled" ? gitRes.value.report : null;
-    const leetcode = lcRes.status === "fulfilled" ? lcRes.value.report : null;
+    const github = gitRes.status === "fulfilled" ? gitRes.value : null;
+    const leetcode = lcRes.status === "fulfilled" ? lcRes.value : null;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toISOString().split("T")[0];
 
-    // ---------------------------------------------
-    // GITHUB: check if today's commit exists
-    // ---------------------------------------------
-    let githubTodayDone = false;
-    if (github?.recentActivity?.length) {
-      githubTodayDone = github.recentActivity.includes(today);
+    // --- GitHub ---
+    const gitData = github?.report;
+    const gitStreak = gitData?.commitStreak?.current ?? 0;
+    const githubToday = gitData?.recentActivity?.includes(today)
+      ? "💚 Completed"
+      : "❌ Not completed";
+
+    // --- LeetCode ---
+    const lcData = leetcode?.report;
+    const lcStreak = lcData?.streak ?? 0;
+
+    let lcToday = "❌ Not completed";
+    if (lcData?.submissionCalendar) {
+      const cal = JSON.parse(lcData.submissionCalendar);
+      const todayTs = Math.floor(new Date(today).getTime() / 1000);
+      if (cal[todayTs] > 0) lcToday = "💚 Completed";
     }
 
-    // ---------------------------------------------
-    // LEETCODE: check if today's submission exists
-    // ---------------------------------------------
-    let leetcodeTodayDone = false;
-    if (leetcode?.submissionCalendar) {
-      try {
-        const calendar = JSON.parse(leetcode.submissionCalendar);
-        const todayUnix = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
-        leetcodeTodayDone = calendar[todayUnix] > 0;
-      } catch {
-        leetcodeTodayDone = false;
-      }
-    }
+    const desc = `
+💻 **GitHub**
+• Streak: **${gitStreak} days**
+• Today: ${githubToday}
 
-    // ----------------------------
-    // PRETTY DISCORD DESCRIPTION
-    // ----------------------------
-    const lines = [];
+🧠 **LeetCode**
+• Streak: **${lcStreak} days**
+• Today: ${lcToday}
+`;
 
-    if (githubToken) {
-      lines.push(
-        `💻 **GitHub**  
-• Streak: **${github?.commitStreak?.current || 0} days**  
-• Today: ${githubTodayDone ? "💚 Completed" : "❌ Not completed"}`
-      );
-    }
-
-    if (leetcodeUser) {
-      lines.push(
-        `🧠 **LeetCode**  
-• Streak: **${leetcode?.streak || 0} days**  
-• Today: ${leetcodeTodayDone ? "💚 Completed" : "❌ Not completed"}`
-      );
-    }
-
-    const description = lines.length
-      ? lines.join("\n\n")
-      : "⚠️ No GitHub or LeetCode connections found.";
-
-    const embed = {
-      color: 0x00ff9d,
-      title: "🔥 Today's Coding Streak Status",
-      description,
-      footer: { text: `Updated • ${new Date().toLocaleTimeString()}` },
-      timestamp: new Date().toISOString(),
+    return {
+      embed: {
+        color: 0x57f287,
+        title: "🔥 Today's Coding Streak Status",
+        description: desc.trim(),
+        footer: { text: `Updated • ${new Date().toLocaleTimeString()}` },
+        timestamp: new Date().toISOString(),
+      },
     };
-
-    return { embed };
   } catch (err) {
-    console.error("❌ buildStreakSummary Error:", err.message);
+    console.error("❌ buildStreakSummary Error:", err);
     throw new Error("Failed to build streak summary");
   }
 };
