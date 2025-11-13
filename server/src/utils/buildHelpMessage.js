@@ -1,13 +1,48 @@
 export const buildHelpMessage = () => {
   const embed = {
     color: 0x5865f2,
-    title: "🧭 AICOO Discord Bot Help",
+    title: "🧭 Eduoo • AICOO Discord Bot Help",
     description: `
-📊 **/summary** — View full AI-powered daily productivity report  
-📅 **/todayreport** — View today's focused activity  
-🔥 **/streak** — Track streaks across LeetCode, GitHub & Duolingo  
-🎯 **/goals** — Check your active/completed goals  
-ℹ️ **/help** — List all available commands  
+Here are all the commands you can use:
+
+📊 **/summary**  
+Get your full AI-powered productivity summary across all connected platforms.
+
+📅 **/todayreport**  
+See what you accomplished *today* across GitHub, LeetCode, Spotify, etc.
+
+🔥 **/streak**  
+View your active GitHub & LeetCode streaks.
+
+🎯 **/goals**  
+Check your current goals & progress.
+
+ℹ️ **/help**  
+Show this help menu.
+
+---
+
+## ⚠️ About “The application did not respond”
+If you ever see this message:
+
+> *"The application did not respond"*
+
+It means Discord was waiting for the bot for **more than 3 seconds**.
+
+### Why it happens:
+- The bot was slow fetching external APIs  
+- Your server/API took too long to reply  
+- The bot crashed or returned an error  
+- No initial reply was sent to Discord  
+
+### How to avoid it:
+- Run your commands again  
+- Keep your integrations connected  
+- Make sure your server is running  
+- Ensure the slash command handler sends a **quick response**  
+  (even a “Processing your request…” message is enough)
+
+If it continues, use **/help** anytime for assistance.
     `,
     footer: { text: "Eduoo • AICOO Productivity Assistant" },
     timestamp: new Date().toISOString(),
