@@ -21,18 +21,20 @@ export const buildDiscordSummary = async (userId) => {
     return {
       embed: {
         color: 0xffa500,
-        title: "📊 AICOO Daily Productivity Summary",
-        description: "⚠️ No connected platforms found. Please connect at least one integration.",
+        title: "📊 Eduoo Daily Productivity Summary",
+        description:
+          "⚠️ No connected platforms found.\n\nPlease connect at least one integration to generate your productivity summary.",
         footer: { text: "Connect integrations to start tracking progress!" },
       },
     };
   }
 
+  // Safe fetch wrapper
   const safe = async (fn, ...args) => {
     try {
       return await Promise.race([
         fn(...args),
-        new Promise((_, reject) => setTimeout(() => reject("timeout"), 5000)),
+        new Promise((_, reject) => setTimeout(() => reject("timeout"), 6000)),
       ]);
     } catch {
       return null;
@@ -43,8 +45,14 @@ export const buildDiscordSummary = async (userId) => {
     const { platform } = conn;
     const icon = icons[platform] || "📘";
 
-    switch (platform) {
+    // Standard username fallback chain
+    const username =
+      conn.metadata?.username ||
+      conn.profileId ||
+      conn.accessToken ||
+      null;
 
+    switch (platform) {
       case "github": {
         const r = await safe(fetchGitHubData, conn.accessToken);
         if (!r) return null;
@@ -57,7 +65,6 @@ export const buildDiscordSummary = async (userId) => {
       }
 
       case "leetcode": {
-        const username = conn.metadata?.username || conn.profileId;
         const r = await safe(fetchLeetCodeData, username);
         if (!r) return null;
 
@@ -68,7 +75,6 @@ export const buildDiscordSummary = async (userId) => {
       }
 
       case "codeforces": {
-        const username = conn.metadata?.username || conn.profileId;
         const r = await safe(fetchCodeforcesData, username);
         if (!r) return null;
 
@@ -79,7 +85,6 @@ export const buildDiscordSummary = async (userId) => {
       }
 
       case "codechef": {
-        const username = conn.metadata?.username || conn.profileId;
         const r = await safe(fetchCodechefData, username);
         if (!r) return null;
 
@@ -89,11 +94,10 @@ export const buildDiscordSummary = async (userId) => {
       }
 
       case "duolingo": {
-        const username = conn.metadata?.username || conn.profileId;
         const r = await safe(fetchDuolingoProfile, username);
         if (!r) return null;
 
-        const langs = r.languages.map(l => l.language).join(", ");
+        const langs = r.languages.map((l) => l.language).join(", ");
 
         return `${icon} **Duolingo**
 • 🔥 Streak: **${r.streak} days**
@@ -119,13 +123,18 @@ export const buildDiscordSummary = async (userId) => {
   };
 
   const results = await Promise.all(connections.map(fetchSection));
-  const finalSections = results.filter(Boolean).join("\n\n");
+  const formatted = results.filter(Boolean).join("\n\n━━━━━━━━━━━━━━━━━━\n\n");
 
   const embed = {
     color: 0x5865f2,
-    title: "📊 AICOO Daily Productivity Summary",
-    description: finalSections || "⚠️ No data available.",
-    fields: [{ name: "💡 Motivation", value: randomMotivation() }],
+    title: "📊 Eduoo Daily Productivity Summary",
+    description: formatted || "⚠️ No data available.",
+    fields: [
+      {
+        name: "💡 Motivation",
+        value: randomMotivation(),
+      },
+    ],
     footer: { text: `Updated • ${new Date().toLocaleString()}` },
     timestamp: new Date().toISOString(),
   };
