@@ -1,5 +1,5 @@
 import fetch from "node-fetch";
-import { ENV } from "../config/env";
+import { ENV } from "../config/env.js";
 
 export const refreshSpotifyToken = async (connection) => {
   if (Date.now() < connection.expiresAt) {
