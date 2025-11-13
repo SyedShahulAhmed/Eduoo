@@ -25,6 +25,7 @@ export const connectSpotify = async (req, res) => {
 };
 
 /** 2️⃣ Spotify OAuth callback */
+/** 2️⃣ Spotify OAuth callback */
 export const spotifyCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
@@ -33,11 +34,9 @@ export const spotifyCallback = async (req, res) => {
     if (!code || !token)
       return res.status(400).json({ message: "Missing code or token" });
 
-    // Decode user JWT to get userId
     const decoded = jwt.verify(token, ENV.JWT_SECRET);
     const userId = decoded.id;
 
-    // Must match EXACTLY the redirect_uri registered in Spotify app
     const redirectUri = `${ENV.SERVER_URL.replace(/\/$/, "")}/api/connections/spotify/callback`;
 
     const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
@@ -53,24 +52,30 @@ export const spotifyCallback = async (req, res) => {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: redirectUri, // ✅ no ?token or state here
-      }).toString(),
+        redirect_uri: redirectUri,
+      }),
     });
 
     const tokenData = await tokenRes.json();
-    const accessToken = tokenData.access_token;
 
-    if (!accessToken) {
+    if (!tokenData.access_token) {
       console.error("⚠️ Spotify token response:", tokenData);
-      return res
-        .status(400)
-        .json({ message: "Failed to get Spotify access token", raw: tokenData });
+      return res.status(400).json({
+        message: "Failed to get Spotify access token",
+        raw: tokenData,
+      });
     }
 
-    // Save connection to DB
+    // 🔥 SAVE BOTH TOKENS + expiry
     await Connection.findOneAndUpdate(
       { userId, platform: "spotify" },
-      { accessToken, connected: true, lastSync: new Date() },
+      {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token, // 🔥 IMPORTANT
+        expiresAt: Date.now() + tokenData.expires_in * 1000, // 🔥 IMPORTANT
+        connected: true,
+        lastSync: new Date(),
+      },
       { upsert: true, new: true }
     );
 
