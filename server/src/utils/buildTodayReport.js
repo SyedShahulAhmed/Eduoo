@@ -18,7 +18,7 @@ export const buildTodayReport = async (userId) => {
     const cfUser = connMap.codeforces?.metadata?.username || connMap.codeforces?.profileId;
     const ccUser = connMap.codechef?.metadata?.username || connMap.codechef?.profileId;
 
-    // Fetch all 6 platforms
+    // Fetch all platforms simultaneously
     const [
       gitHubRes,
       leetCodeRes,
@@ -35,10 +35,10 @@ export const buildTodayReport = async (userId) => {
       ccUser ? fetchCodechefData(ccUser) : null,
     ]);
 
-    const gitHub = gitHubRes.status === "fulfilled" ? gitHubRes.value.report : null;
-    const leetCode = leetCodeRes.status === "fulfilled" ? leetCodeRes.value.report : null;
+    const github = gitHubRes.status === "fulfilled" ? gitHubRes.value : null;
+    const leetcode = leetCodeRes.status === "fulfilled" ? leetCodeRes.value : null;
     const duolingo = duolingoRes.status === "fulfilled" ? duolingoRes.value : null;
-    const spotify = spotifyRes.status === "fulfilled" ? spotifyRes.value.data : null;
+    const spotify = spotifyRes.status === "fulfilled" ? spotifyRes.value : null;
     const codeforces = cfRes.status === "fulfilled" ? cfRes.value : null;
     const codechef = ccRes.status === "fulfilled" ? ccRes.value : null;
 
@@ -48,45 +48,46 @@ export const buildTodayReport = async (userId) => {
     // GITHUB — Today commits
     // ---------------------------
     const githubToday =
-      gitHub?.recentActivity?.includes(today) ? "💚 Yes" : "❌ No";
+      github?.recentActivity?.includes(today) ? "💚 Yes" : "❌ No";
 
     // ---------------------------
     // LEETCODE — Today submissions
     // ---------------------------
     let leetcodeToday = "❌ No";
-    if (leetCode?.submissionCalendar) {
-      try {
-        const cal = JSON.parse(leetCode.submissionCalendar);
+    try {
+      if (leetcode?.submissionCalendar) {
+        const cal = JSON.parse(leetcode.submissionCalendar);
         const ts = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
         if (cal[ts] > 0) leetcodeToday = "💚 Yes";
-      } catch {}
-    }
+      }
+    } catch {}
 
     // ---------------------------
-    // DUOLINGO — only streak available
+    // DUOLINGO — streak only
     // ---------------------------
-    const duolingoToday = "⚠️ Not available (API does not give today XP)";
     const duolingoStreak = duolingo?.streak ?? 0;
+    const duolingoToday = duolingo?.todayDone
+      ? "💚 Yes"
+      : "❌ No XP detected";
 
     // ---------------------------
-    // SPOTIFY — Today tracks played
+    // SPOTIFY — Tracks played today
     // ---------------------------
     const spotifyTodayTracks = spotify?.stats?.totalRecentTracks ?? 0;
 
     // ---------------------------
-    // CODEFORCES — No daily data (rating only changes on contests)
+    // CODEFORCES — no daily data
     // ---------------------------
     const cfToday = "⚠️ No daily activity available";
 
     // ---------------------------
-    // CODECHEF — No daily data
+    // CODECHEF — no daily data
     // ---------------------------
     const ccToday = "⚠️ No daily activity available";
 
     // ---------------------------
-    // FINAL DISPLAY
+    // FINAL RESPONSE
     // ---------------------------
-
     const description = `
 📅 **Today’s Activity Summary**
 
@@ -98,7 +99,7 @@ export const buildTodayReport = async (userId) => {
 
 🗣️ **Duolingo**
 • Streak: **${duolingoStreak} days**
-• Today Activity: **${duolingoToday}**
+• Today: **${duolingoToday}**
 
 🎵 **Spotify**
 • Tracks Played Today: **${spotifyTodayTracks}**
@@ -110,15 +111,15 @@ export const buildTodayReport = async (userId) => {
 • Activity: **${ccToday}**
     `.trim();
 
-    const embed = {
-      color: 0x00c7ff,
-      title: "📅 Today’s Productivity Snapshot",
-      description,
-      footer: { text: `Updated • ${new Date().toLocaleTimeString()}` },
-      timestamp: new Date().toISOString(),
+    return {
+      embed: {
+        color: 0x00c7ff,
+        title: "📅 Today’s Productivity Snapshot",
+        description,
+        footer: { text: `Updated • ${new Date().toLocaleTimeString()}` },
+        timestamp: new Date().toISOString(),
+      },
     };
-
-    return { embed };
 
   } catch (err) {
     console.error("❌ buildTodayReport Error:", err.message);

@@ -10,6 +10,7 @@ export const buildStreakSummary = async (userId) => {
     const githubToken = connMap.github?.accessToken;
     const leetcodeUser = connMap.leetcode?.profileId;
 
+    // Run both in parallel
     const [gitRes, lcRes] = await Promise.allSettled([
       githubToken ? fetchGitHubData(githubToken) : null,
       leetcodeUser ? fetchLeetCodeData(leetcodeUser) : null,
@@ -20,24 +21,31 @@ export const buildStreakSummary = async (userId) => {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // --- GitHub ---
-    const gitData = github?.report;
-    const gitStreak = gitData?.commitStreak?.current ?? 0;
-    const githubToday = gitData?.recentActivity?.includes(today)
+    // -----------------------------
+    // GITHUB
+    // -----------------------------
+    const gitStreak = github?.commitStreak?.current ?? 0;
+    const githubToday = github?.recentActivity?.includes(today)
       ? "💚 Completed"
       : "❌ Not completed";
 
-    // --- LeetCode ---
-    const lcData = leetcode?.report;
-    const lcStreak = lcData?.streak ?? 0;
+    // -----------------------------
+    // LEETCODE
+    // -----------------------------
+    const lcStreak = leetcode?.streak ?? 0;
 
     let lcToday = "❌ Not completed";
-    if (lcData?.submissionCalendar) {
-      const cal = JSON.parse(lcData.submissionCalendar);
-      const todayTs = Math.floor(new Date(today).getTime() / 1000);
-      if (cal[todayTs] > 0) lcToday = "💚 Completed";
-    }
+    try {
+      if (leetcode?.submissionCalendar) {
+        const cal = JSON.parse(leetcode.submissionCalendar);
+        const ts = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+        if (cal[ts] > 0) lcToday = "💚 Completed";
+      }
+    } catch {}
 
+    // -----------------------------
+    // FINAL EMBED
+    // -----------------------------
     const desc = `
 💻 **GitHub**
 • Streak: **${gitStreak} days**
@@ -46,13 +54,13 @@ export const buildStreakSummary = async (userId) => {
 🧠 **LeetCode**
 • Streak: **${lcStreak} days**
 • Today: ${lcToday}
-`;
+    `.trim();
 
     return {
       embed: {
         color: 0x57f287,
         title: "🔥 Today's Coding Streak Status",
-        description: desc.trim(),
+        description: desc,
         footer: { text: `Updated • ${new Date().toLocaleTimeString()}` },
         timestamp: new Date().toISOString(),
       },
