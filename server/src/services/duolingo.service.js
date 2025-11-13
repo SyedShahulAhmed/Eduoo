@@ -1,6 +1,5 @@
 // src/services/duolingo.service.js
 import fetch from "node-fetch";
-import { ENV } from "../config/env.js";
 
 const safeNum = (v) => {
   if (v == null) return 0;
@@ -8,103 +7,115 @@ const safeNum = (v) => {
   return Number(v) || 0;
 };
 
-const tryFetchJson = async (url, timeout = 8000) => {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
+const getJson = async (url) => {
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AICOO",
+        "Accept": "application/json",
+      },
+      timeout: 10000,
+    });
+
     const text = await res.text();
     try {
-      return { ok: res.ok, json: text ? JSON.parse(text) : null, status: res.status };
+      return { ok: res.ok, status: res.status, json: JSON.parse(text) };
     } catch {
-      return { ok: res.ok, json: null, status: res.status };
+      return { ok: res.ok, status: res.status, json: null };
     }
   } catch (err) {
-    clearTimeout(id);
-    return { ok: false, error: err };
+    return { ok: false, status: 0, json: null, error: err.message };
   }
 };
 
 export const fetchDuolingoProfile = async (username) => {
   try {
+    // MAIN ENDPOINT
     const url = `https://www.duolingo.com/2017-06-30/users?username=${encodeURIComponent(username)}`;
-    const r = await tryFetchJson(url, 9000);
+    const r = await getJson(url);
 
-    if (!r.ok || !r.json) throw new Error(`Duolingo user endpoint failed (status=${r.status})`);
+    if (!r.ok || !r.json || !r.json.users || !r.json.users.length) {
+      return {
+        error: true,
+        message: "Duolingo API returned no data",
+        username,
+        streak: 0,
+        totalXp: 0,
+        todayXp: null,
+        todayDone: null,
+        lastActivity: null,
+        languages: [],
+      };
+    }
 
-    const user = r.json.users?.[0];
-    if (!user) throw new Error("User not found in Duolingo JSON");
+    const user = r.json.users[0];
 
-    // -----------------------------------------
-    // PARSE COURSES
-    // -----------------------------------------
+    // COURSES
     const courses = (user.courses || []).map((c) => ({
-      language: c.title || c.name || c.locale || "Unknown",
-      xp: safeNum(c.xp || c.points || c.totalXp || 0),
+      language: c.title || c.name || "Unknown",
       level: c.level ?? null,
+      xp: safeNum(c.xp || c.points || c.totalXp),
       crowns: c.crowns ?? null,
     }));
 
-    const apiTotalXp = safeNum(user.totalXp ?? user.total_xp ?? 0);
-    const sumCoursesXp = courses.reduce((acc, c) => acc + (c.xp || 0), 0);
-    const totalXp = Math.max(apiTotalXp, sumCoursesXp);
+    const totalXp =
+      safeNum(user.totalXp) ||
+      courses.reduce((sum, c) => sum + (c.xp || 0), 0);
 
-    // -----------------------------------------
-    // TODAY XP / LAST ACTIVITY
-    // -----------------------------------------
-    let todayXp = 0;
-    let todayDone = false;
+    // Extract possible XP history (NOT guaranteed)
+    const xpHistory =
+      user.xpGains ||
+      user.calendar ||
+      user.weeklyXp ||
+      [];
+
+    let todayXp = null;
+    let todayDone = null;
     let lastActivity = null;
 
-    const todayDate = new Date().toISOString().slice(0, 10);
+    if (Array.isArray(xpHistory) && xpHistory.length > 0) {
+      const today = new Date().toISOString().slice(0, 10);
 
-    // XP calendar structure (present in many accounts)
-    const xpCalendar = user.xpGains || user.weeklyXp || user.calendar || [];
+      todayXp = 0;
 
-    if (Array.isArray(xpCalendar)) {
-      // Each xp gain has something like { xp: number, date: "2025-11-13" }
-      for (const entry of xpCalendar) {
-        const date = entry?.date?.slice(0, 10);
-        if (date) {
-          if (date === todayDate) {
-            todayXp += safeNum(entry.xp);
-          }
-          if (!lastActivity || date > lastActivity) {
-            lastActivity = date;
-          }
+      for (const entry of xpHistory) {
+        const date = entry.date?.slice(0, 10);
+        if (!date) continue;
+
+        if (date === today) {
+          todayXp += safeNum(entry.xp);
+        }
+
+        if (!lastActivity || date > lastActivity) {
+          lastActivity = date;
         }
       }
+
+      todayDone = todayXp > 0;
     }
 
-    todayDone = todayXp > 0;
-
-    // -----------------------------------------
-    // JOINED DATE FIX
-    // -----------------------------------------
-    let joined = user.creationDate ?? user.joinedAt ?? user.created_at ?? null;
-    if (joined && typeof joined === "number") {
-      joined = new Date(joined < 1e12 ? joined * 1000 : joined).toISOString();
-    }
-
-    // -----------------------------------------
-    // RESULT JSON
-    // -----------------------------------------
     return {
-      username: user.username ?? username,
+      username: user.username,
       streak: user.site_streak ?? user.streak ?? 0,
       totalXp,
       todayXp,
       todayDone,
       lastActivity,
       languages: courses,
-      avatarUrl: user.picture || null,
-      joined,
-      source: "duolingo-2017-06-30",
-      raw: user,
+      avatarUrl: user.picture,
     };
   } catch (err) {
-    console.error("❌ Duolingo fetch failed:", err.message || err);
-    throw new Error("Failed to fetch Duolingo profile");
+    console.error("Duolingo Fetch Error:", err.message);
+    return {
+      error: true,
+      message: "Internal error while fetching Duolingo",
+      username,
+      streak: 0,
+      totalXp: 0,
+      todayXp: null,
+      todayDone: null,
+      lastActivity: null,
+      languages: [],
+    };
   }
 };
