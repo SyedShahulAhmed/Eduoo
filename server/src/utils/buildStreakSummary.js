@@ -1,5 +1,4 @@
 import Connection from "../models/Connection.js";
-import { fetchDuolingoProfile } from "../services/duolingo.service.js";
 import { fetchGitHubData } from "../services/github.service.js";
 import { fetchLeetCodeData } from "../services/leetcode.service.js";
 
@@ -8,39 +7,72 @@ export const buildStreakSummary = async (userId) => {
     const connections = await Connection.find({ userId, connected: true });
     const connMap = Object.fromEntries(connections.map((c) => [c.platform, c]));
 
-    const duolingoUser = connMap.duolingo?.metadata?.profileId;
     const githubToken = connMap.github?.accessToken;
     const leetcodeUser = connMap.leetcode?.profileId;
 
-    // Parallel fetch
-    const [duoRes, gitRes, lcRes] = await Promise.allSettled([
-      duolingoUser ? fetchDuolingoProfile(duolingoUser) : null,
+    // Fetch latest data in parallel
+    const [gitRes, lcRes] = await Promise.allSettled([
       githubToken ? fetchGitHubData(githubToken) : null,
       leetcodeUser ? fetchLeetCodeData(leetcodeUser) : null,
     ]);
 
-    const duolingo = duoRes.status === "fulfilled" ? duoRes.value : null;
-    const github = gitRes.status === "fulfilled" ? gitRes.value : null;
-    const leetcode = lcRes.status === "fulfilled" ? lcRes.value : null;
+    const github = gitRes.status === "fulfilled" ? gitRes.value.report : null;
+    const leetcode = lcRes.status === "fulfilled" ? lcRes.value.report : null;
 
-    // Adapted to new JSON shapes
-    const duolingoData = duolingo?.report;
-    const duoStreak = duolingoData?.streak ?? 0;
-    const gitStreak =
-      github?.commitStreak?.current ?? github?.recentCommits ?? 0;
-    const lcStreak = leetcode?.streak ?? 0;
+    const today = new Date().toISOString().slice(0, 10);
 
-    const desc = `
-${duolingoUser ? `🗣️ **Duolingo:** ${duoStreak}-day streak ${duoStreak > 0 ? "✅" : "❌"}` : ""}
-${githubToken ? `💻 **GitHub:** ${gitStreak}-day commit streak ${gitStreak > 0 ? "✅" : "❌"}` : ""}
-${leetcodeUser ? `🧠 **LeetCode:** ${lcStreak}-day coding streak ${lcStreak > 0 ? "✅" : "❌"}` : ""}
-`;
+    // ---------------------------------------------
+    // GITHUB: check if today's commit exists
+    // ---------------------------------------------
+    let githubTodayDone = false;
+    if (github?.recentActivity?.length) {
+      githubTodayDone = github.recentActivity.includes(today);
+    }
+
+    // ---------------------------------------------
+    // LEETCODE: check if today's submission exists
+    // ---------------------------------------------
+    let leetcodeTodayDone = false;
+    if (leetcode?.submissionCalendar) {
+      try {
+        const calendar = JSON.parse(leetcode.submissionCalendar);
+        const todayUnix = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+        leetcodeTodayDone = calendar[todayUnix] > 0;
+      } catch {
+        leetcodeTodayDone = false;
+      }
+    }
+
+    // ----------------------------
+    // PRETTY DISCORD DESCRIPTION
+    // ----------------------------
+    const lines = [];
+
+    if (githubToken) {
+      lines.push(
+        `💻 **GitHub**  
+• Streak: **${github?.commitStreak?.current || 0} days**  
+• Today: ${githubTodayDone ? "💚 Completed" : "❌ Not completed"}`
+      );
+    }
+
+    if (leetcodeUser) {
+      lines.push(
+        `🧠 **LeetCode**  
+• Streak: **${leetcode?.streak || 0} days**  
+• Today: ${leetcodeTodayDone ? "💚 Completed" : "❌ Not completed"}`
+      );
+    }
+
+    const description = lines.length
+      ? lines.join("\n\n")
+      : "⚠️ No GitHub or LeetCode connections found.";
 
     const embed = {
-      color: 0x57f287,
-      title: "🔥 Your Streak Tracker",
-      description: desc.trim() || "⚠️ No connected platforms with streak data.",
-      footer: { text: "Keep the fire alive! • AICOO" },
+      color: 0x00ff9d,
+      title: "🔥 Today's Coding Streak Status",
+      description,
+      footer: { text: `Updated • ${new Date().toLocaleTimeString()}` },
       timestamp: new Date().toISOString(),
     };
 
