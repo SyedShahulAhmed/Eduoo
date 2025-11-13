@@ -85,19 +85,26 @@ router.post(
 
         /** 2️⃣ /todayreport — Today's snapshot */
         case "todayreport": {
+          // 1️⃣ Acknowledge immediately (avoid timeout)
+          res.json({ type: 5 }); // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
+
           try {
+            // 2️⃣ Build report with timeout
             const { embed } = await withTimeout(
               buildTodayReport(userId),
-              8_000,
+              12_000,
               "Today's report timed out."
             );
-            return res.json({ type: 4, data: { embeds: [embed] } });
+
+            // 3️⃣ Send follow-up
+            await sendFollowup(interaction.token, { embeds: [embed] });
           } catch (err) {
-            return res.json({
-              type: 4,
-              data: { content: `⚠️ Failed to generate today's report.` },
+            console.error("❌ todayreport error:", err.message);
+            await sendFollowup(interaction.token, {
+              content: `⚠️ Failed to generate today's report.`,
             });
           }
+          return;
         }
 
         /** 3️⃣ /streak — Active streaks */
@@ -184,11 +191,14 @@ const withTimeout = (promise, ms, msg) =>
 
 /** 🔁 Send follow-up message to Discord after deferred reply */
 const sendFollowup = async (token, payload) => {
-  await fetch(`https://discord.com/api/v10/webhooks/${ENV.DISCORD_CLIENT_ID}/${token}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  await fetch(
+    `https://discord.com/api/v10/webhooks/${ENV.DISCORD_CLIENT_ID}/${token}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
 };
 
 export default router;
