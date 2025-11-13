@@ -4,37 +4,70 @@ import fetch from "node-fetch";
 import { ENV } from "../../config/env.js";
 import Goal from "../../models/Goal.js";
 
+
+// -------------------------------
+// 1️⃣ Fetch Codeforces Report
+// -------------------------------
 export const getCodeforcesReport = async (req, res) => {
   try {
     const connection = await Connection.findOne({
       userId: req.user.id,
       platform: "codeforces",
     });
-    if (!connection?.connected || !connection.accessToken)
-      return res.status(400).json({ message: "Codeforces not connected" });
 
-    const handle = connection.accessToken;
-    const data = await fetchCodeforcesData(handle);
+    if (!connection?.connected) {
+      return res.status(400).json({ message: "Codeforces not connected" });
+    }
+
+    // Use correct username source
+    const handle =
+      connection.metadata?.username ||
+      connection.profileId ||
+      connection.accessToken; // final fallback for old data
+
+    if (!handle) {
+      return res.status(400).json({ message: "No Codeforces username found" });
+    }
+
+    const report = await fetchCodeforcesData(handle);
 
     res.status(200).json({
       message: "Codeforces report generated successfully",
-      report: data,
+      report,
     });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch Codeforces report", error: err.message });
+    res.status(500).json({
+      message: "Failed to fetch Codeforces report",
+      error: err.message,
+    });
   }
 };
 
+
+
+// -------------------------------
+// 2️⃣ AI Insights
+// -------------------------------
 export const getCodeforcesAIInsights = async (req, res) => {
   try {
     const connection = await Connection.findOne({
       userId: req.user.id,
       platform: "codeforces",
     });
-    if (!connection?.connected || !connection.accessToken)
-      return res.status(400).json({ message: "Codeforces not connected" });
 
-    const handle = connection.accessToken;
+    if (!connection?.connected) {
+      return res.status(400).json({ message: "Codeforces not connected" });
+    }
+
+    const handle =
+      connection.metadata?.username ||
+      connection.profileId ||
+      connection.accessToken;
+
+    if (!handle) {
+      return res.status(400).json({ message: "No Codeforces username found" });
+    }
+
     const data = await fetchCodeforcesData(handle);
 
     const prompt = `
@@ -53,53 +86,63 @@ Respond in JSON:
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
       }
     );
 
     const aiData = await aiRes.json();
-    let textOutput = aiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    textOutput = textOutput.replace(/```json|```/g, "").trim();
+    let text = aiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    text = text.replace(/```json|```/g, "").trim();
 
     let parsed;
     try {
-      parsed = JSON.parse(textOutput);
+      parsed = JSON.parse(text);
     } catch {
       parsed = {
         insights: [
           "Your performance is steadily improving.",
           "You show strong consistency in recent contests.",
-          "You’re mastering mid-tier problem sets."
+          "You’re mastering mid-tier problem sets.",
         ],
         recommendations: [
           "Upsolve 3 unsolved problems weekly.",
           "Review editorials after each contest.",
-          "Increase participation frequency for faster growth."
+          "Increase participation frequency for faster growth.",
         ],
-        motivation: "Every contest is a new opportunity to climb higher 🚀"
+        motivation: "Every contest is a new opportunity to climb higher 🚀",
       };
     }
 
-    res.status(200).json({ message: "Codeforces AI Insights generated", data: parsed });
+    res.status(200).json({
+      message: "Codeforces AI Insights generated",
+      data: parsed,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Failed to generate insights", error: err.message });
+    res.status(500).json({
+      message: "Failed to generate insights",
+      error: err.message,
+    });
   }
 };
+
+
+
+// -------------------------------
+// 3️⃣ Convert AI Insights → Goals
+// -------------------------------
 export const createGoalsFromCodeforcesInsights = async (req, res) => {
   try {
-    // 🧩 1️⃣ Get stored username (handle) from the user’s connection
     const connection = await Connection.findOne({
       userId: req.user.id,
       platform: "codeforces",
     });
 
-    if (!connection?.connected || !connection.accessToken) {
+    if (!connection?.connected) {
       return res.status(400).json({ message: "Codeforces not connected" });
     }
 
-    const handle = connection.accessToken;
-
-    // 🧠 2️⃣ Fetch insights again (from our own endpoint)
     const insightsRes = await fetch(
       `${ENV.SERVER_URL}/api/reports/codeforces/insights`,
       {
@@ -108,19 +151,16 @@ export const createGoalsFromCodeforcesInsights = async (req, res) => {
     );
 
     const insightsData = await insightsRes.json();
+    const recs = insightsData?.data?.recommendations || [];
 
-    // ✅ Ensure we have AI recommendations
-    if (!insightsData?.data?.recommendations?.length) {
+    if (recs.length === 0) {
       return res
         .status(400)
         .json({ message: "No AI recommendations found to convert into goals" });
     }
 
-    const recommendations = insightsData.data.recommendations;
-    const createdGoals = [];
-
-    // 🧱 3️⃣ Convert recommendations into Goal entries
-    for (const rec of recommendations.slice(0, 3)) {
+    const goals = [];
+    for (const rec of recs.slice(0, 3)) {
       const goal = await Goal.create({
         userId: req.user.id,
         title: rec,
@@ -130,13 +170,12 @@ export const createGoalsFromCodeforcesInsights = async (req, res) => {
         status: "active",
         createdAt: new Date(),
       });
-      createdGoals.push(goal);
+      goals.push(goal);
     }
 
-    // 🎯 4️⃣ Return newly created goals
     res.status(201).json({
       message: "AI-based Codeforces goals created successfully",
-      goals: createdGoals,
+      goals,
     });
   } catch (error) {
     console.error("❌ createGoalsFromCodeforcesInsights Error:", error);
