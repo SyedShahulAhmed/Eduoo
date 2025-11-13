@@ -3,6 +3,8 @@ import { fetchGitHubData } from "../services/github.service.js";
 import { fetchLeetCodeData } from "../services/leetcode.service.js";
 import { fetchDuolingoProfile } from "../services/duolingo.service.js";
 import { fetchSpotifyData } from "../services/spotify.service.js";
+import { fetchCodeforcesData } from "../services/codeforces.service.js";
+import { fetchCodechefData } from "../services/codechef.service.js";
 
 export const buildTodayReport = async (userId) => {
   try {
@@ -13,61 +15,111 @@ export const buildTodayReport = async (userId) => {
     const leetcodeUser = connMap.leetcode?.profileId;
     const duolingoUser = connMap.duolingo?.metadata?.profileId;
     const spotifyToken = connMap.spotify?.accessToken;
+    const cfUser = connMap.codeforces?.metadata?.username || connMap.codeforces?.profileId;
+    const ccUser = connMap.codechef?.metadata?.username || connMap.codechef?.profileId;
 
-    // Fetch all data in parallel
-    const [gitHubRes, leetCodeRes, duolingoRes, spotifyRes] = await Promise.allSettled([
+    // Fetch all 6 platforms
+    const [
+      gitHubRes,
+      leetCodeRes,
+      duolingoRes,
+      spotifyRes,
+      cfRes,
+      ccRes
+    ] = await Promise.allSettled([
       githubToken ? fetchGitHubData(githubToken) : null,
       leetcodeUser ? fetchLeetCodeData(leetcodeUser) : null,
       duolingoUser ? fetchDuolingoProfile(duolingoUser) : null,
       spotifyToken ? fetchSpotifyData(spotifyToken) : null,
+      cfUser ? fetchCodeforcesData(cfUser) : null,
+      ccUser ? fetchCodechefData(ccUser) : null,
     ]);
 
-    const gitHub = gitHubRes.status === "fulfilled" ? gitHubRes.value : null;
-    const leetCode = leetCodeRes.status === "fulfilled" ? leetCodeRes.value : null;
+    const gitHub = gitHubRes.status === "fulfilled" ? gitHubRes.value.report : null;
+    const leetCode = leetCodeRes.status === "fulfilled" ? leetCodeRes.value.report : null;
     const duolingo = duolingoRes.status === "fulfilled" ? duolingoRes.value : null;
-    const spotify = spotifyRes.status === "fulfilled" ? spotifyRes.value : null;
+    const spotify = spotifyRes.status === "fulfilled" ? spotifyRes.value.data : null;
+    const codeforces = cfRes.status === "fulfilled" ? cfRes.value : null;
+    const codechef = ccRes.status === "fulfilled" ? ccRes.value : null;
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().slice(0, 10);
 
-    // GitHub
-    const commitsToday =
-      gitHub?.recentCommits && gitHub?.recentCommits > 0 ? gitHub.recentCommits : 0;
+    // ---------------------------
+    // GITHUB — Today commits
+    // ---------------------------
+    const githubToday =
+      gitHub?.recentActivity?.includes(today) ? "💚 Yes" : "❌ No";
 
-    // LeetCode
-    const lcSolvedToday = leetCode?.submissionCalendar
-      ? Object.entries(JSON.parse(leetCode.submissionCalendar)).filter(([ts]) => {
-          const date = new Date(ts * 1000).toISOString().split("T")[0];
-          return date === today;
-        }).length
-      : 0;
+    // ---------------------------
+    // LEETCODE — Today submissions
+    // ---------------------------
+    let leetcodeToday = "❌ No";
+    if (leetCode?.submissionCalendar) {
+      try {
+        const cal = JSON.parse(leetCode.submissionCalendar);
+        const ts = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+        if (cal[ts] > 0) leetcodeToday = "💚 Yes";
+      } catch {}
+    }
 
-    // Duolingo (from duolingo.report)
-    const duolingoData = duolingo?.report;
-    const duolingoStreak =
-      duolingoData?.streak && duolingoData?.streak > 0 ? "✅ Continued" : "❌ Missed";
+    // ---------------------------
+    // DUOLINGO — only streak available
+    // ---------------------------
+    const duolingoToday = "⚠️ Not available (API does not give today XP)";
+    const duolingoStreak = duolingo?.streak ?? 0;
 
-    // Spotify (from spotify.data)
-    const spotifyData = spotify?.data;
-    const spotifyTracks = spotifyData?.stats?.totalRecentTracks ?? 0;
+    // ---------------------------
+    // SPOTIFY — Today tracks played
+    // ---------------------------
+    const spotifyTodayTracks = spotify?.stats?.totalRecentTracks ?? 0;
 
-    // 🧾 Description
-    const desc = `
-📅 **Today's Activity**
-💻 GitHub — ${commitsToday} commit${commitsToday !== 1 ? "s" : ""}
-🧠 LeetCode — ${lcSolvedToday} problem${lcSolvedToday !== 1 ? "s" : ""}
-🗣️ Duolingo — ${duolingoStreak} streak
-🎵 Spotify — ${spotifyTracks} track${spotifyTracks !== 1 ? "s" : ""} played
-`;
+    // ---------------------------
+    // CODEFORCES — No daily data (rating only changes on contests)
+    // ---------------------------
+    const cfToday = "⚠️ No daily activity available";
+
+    // ---------------------------
+    // CODECHEF — No daily data
+    // ---------------------------
+    const ccToday = "⚠️ No daily activity available";
+
+    // ---------------------------
+    // FINAL DISPLAY
+    // ---------------------------
+
+    const description = `
+📅 **Today’s Activity Summary**
+
+💻 **GitHub**
+• Commit Today: **${githubToday}**
+
+🧠 **LeetCode**
+• Solved Today: **${leetcodeToday}**
+
+🗣️ **Duolingo**
+• Streak: **${duolingoStreak} days**
+• Today Activity: **${duolingoToday}**
+
+🎵 **Spotify**
+• Tracks Played Today: **${spotifyTodayTracks}**
+
+⚔️ **Codeforces**
+• Activity: **${cfToday}**
+
+🍴 **CodeChef**
+• Activity: **${ccToday}**
+    `.trim();
 
     const embed = {
-      color: 0xfee75c,
-      title: "📅 Today's Productivity Snapshot",
-      description: desc.trim(),
-      footer: { text: "AI-Generated Summary • AICOO" },
+      color: 0x00c7ff,
+      title: "📅 Today’s Productivity Snapshot",
+      description,
+      footer: { text: `Updated • ${new Date().toLocaleTimeString()}` },
       timestamp: new Date().toISOString(),
     };
 
     return { embed };
+
   } catch (err) {
     console.error("❌ buildTodayReport Error:", err.message);
     throw new Error("Failed to build today's report");
