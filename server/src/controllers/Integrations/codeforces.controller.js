@@ -4,24 +4,36 @@ import Connection from "../../models/Connection.js";
 export const connectCodeforces = async (req, res) => {
   try {
     const { username } = req.body;
-    if (!username) return res.status(400).json({ message: "Codeforces username is required" });
+
+    if (!username) {
+      return res.status(400).json({ message: "Codeforces username is required" });
+    }
 
     await Connection.findOneAndUpdate(
       { userId: req.user.id, platform: "codeforces" },
       {
         connected: true,
-        accessToken: username, // storing username in place of accessToken for simplicity
+        metadata: { username },       // store username properly
+        profileId: username,          // optional but useful for fallback
+        accessToken: null,            // no token needed for Codeforces
         lastSync: new Date(),
       },
       { upsert: true, new: true }
     );
 
-    res.status(200).json({ message: "Codeforces connected successfully ✅", username });
+    return res.status(200).json({
+      message: "Codeforces connected successfully ✅",
+      username,
+    });
   } catch (error) {
     console.error("❌ connectCodeforces Error:", error);
-    res.status(500).json({ message: "Codeforces connect failed", error: error.message });
+    res.status(500).json({
+      message: "Codeforces connect failed",
+      error: error.message,
+    });
   }
 };
+
 
 /** 2️⃣ Disconnect Codeforces */
 export const disconnectCodeforces = async (req, res) => {
