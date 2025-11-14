@@ -2,14 +2,14 @@ import mongoose from "mongoose";
 
 const connectionSchema = new mongoose.Schema(
   {
-    /** Linked AICOO User */
+    // Linked AICOO User
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
 
-    /** Platform identifier (e.g. 'github', 'spotify', 'leetcode', etc.) */
+    // Platform (e.g., github, spotify, notion)
     platform: {
       type: String,
       required: true,
@@ -17,41 +17,44 @@ const connectionSchema = new mongoose.Schema(
       lowercase: true,
     },
 
-    /** OAuth tokens (if applicable) */
+    // OAuth tokens
     accessToken: { type: String, default: null },
     refreshToken: { type: String, default: null },
 
-    /** Username or profile ID for non-OAuth platforms */
-    profileId: { type: String, default: null }, // ✅ renamed for consistency with controllers
-    profileUrl: { type: String, default: null }, // 🌐 optional (for frontend use)
+    // Optional platform profile info
+    profileId: { type: String, default: null },
+    profileUrl: { type: String, default: null },
 
-    /** Whether connection is active */
+    // Status
     connected: { type: Boolean, default: false },
-
-    /** Optional extra metadata for analytics or platform stats */
-    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
-
-    /** Last successful sync timestamp */
-    lastSync: { type: Date, default: null },
-
-    /** When the OAuth token expires (if relevant) */
-    tokenExpiresAt: { type: Date, default: null },
-
-    /** Optional error tracking */
-    lastError: { type: String, default: null },
-
-    /** When the connection was established */
     connectedAt: { type: Date, default: null },
 
-    // Notion-specific
+    // Sync info
+    lastSync: { type: Date, default: null },
+    tokenExpiresAt: { type: Date, default: null },
+    lastError: { type: String, default: null },
+
+    // Notion-specific fields
     botId: { type: String, default: null },
-    notionDatabaseId: { type: String, default: null }, // created DB id for goals/dashboard
-    notionReportsPageId: { type: String, default: null }, // top-level page to hold weekly subpages
+    notionDatabaseId: { type: String, default: null },
+    notionReportsPageId: { type: String, default: null },
+    notionHomePageId: { type: String, default: null },
+
+    // Notion / Dashboard metadata (ONE metadata object ONLY)
+    metadata: {
+      type: new mongoose.Schema(
+        {
+          dailyDashboardDbId: { type: String, default: null },
+        },
+        { _id: false }
+      ),
+      default: {},
+    },
   },
   { timestamps: true }
 );
 
-/** Ensure one unique connection per platform per user */
+// Unique per platform per user
 connectionSchema.index({ userId: 1, platform: 1 }, { unique: true });
 
 export default mongoose.model("Connection", connectionSchema);
