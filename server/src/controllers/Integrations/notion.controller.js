@@ -1,8 +1,8 @@
 
 import fetch from "node-fetch";
 import jwt from "jsonwebtoken";
-import Connection from "../../../models/Connection.js";
-import { ENV } from "../../../config/env.js";
+import Connection from "../../models/Connection.js";
+import { ENV } from "../../config/env.js";
 import {
   fetchNotionUser,
   syncPendingGoalsForUser,
@@ -11,7 +11,7 @@ import {
   ensureDailyDashboardDatabase,
   ensureHomePage,
   updateHomePageLinks,
-} from "../../../services/notion.sync.service.js";
+} from "../../services/notion.service.js";
 
 /* =========================================================
    🔗 1. Redirect User → Notion OAuth (with debug logs)
