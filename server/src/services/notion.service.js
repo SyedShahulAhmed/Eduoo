@@ -1,4 +1,3 @@
-// src/services/notion.sync.service.js
 import fetch from "node-fetch";
 import Connection from "../models/Connection.js";
 import Goal from "../models/Goal.js";
@@ -6,7 +5,6 @@ import { ENV } from "../config/env.js";
 
 /**
  * Minimal wrappers for Notion API calls used by the sync logic.
- * NOTE: Notion API expects Notion-Version header; we use 2022-06-28 for stability.
  */
 
 const NOTION_HEADERS = (token) => ({
@@ -14,6 +12,10 @@ const NOTION_HEADERS = (token) => ({
   "Notion-Version": "2022-06-28",
   "Content-Type": "application/json",
 });
+
+/* ===========================================================
+    USER
+=========================================================== */
 
 export const fetchNotionUser = async (accessToken) => {
   try {
@@ -39,10 +41,10 @@ export const fetchNotionUser = async (accessToken) => {
   }
 };
 
+/* ===========================================================
+    SEARCH DATABASES
+=========================================================== */
 
-/**
- * 2️⃣ Search Notion databases accessible to user
- */
 export const searchNotionDatabases = async (accessToken) => {
   try {
     const res = await fetch("https://api.notion.com/v1/search", {
@@ -74,22 +76,33 @@ export const searchNotionDatabases = async (accessToken) => {
   }
 };
 
+/* ===========================================================
+    ENSURE GOALS DATABASE
+=========================================================== */
 
 export const ensureNotionDatabase = async (conn, user) => {
   if (conn.notionDatabaseId) return conn.notionDatabaseId;
 
   const body = {
-    parent: { type: "workspace" }, // ✅ FIXED
+    parent: { workspace: true }, // VALID
     icon: { type: "emoji", emoji: "🎯" },
     title: [{ type: "text", text: { content: "AICOO Goals" } }],
     properties: {
       Name: { title: {} },
-      Status: { select: { options: [{ name: "active" }, { name: "completed" }, { name: "paused" }] } },
+      Status: {
+        select: {
+          options: [
+            { name: "active" },
+            { name: "completed" },
+            { name: "paused" },
+          ],
+        },
+      },
       Progress: { number: {} },
       Target: { number: {} },
       Deadline: { date: {} },
-      Type: { rich_text: {} }
-    }
+      Type: { rich_text: {} },
+    },
   };
 
   const res = await fetch("https://api.notion.com/v1/databases", {
@@ -109,23 +122,39 @@ export const ensureNotionDatabase = async (conn, user) => {
   return data.id;
 };
 
+/* ===========================================================
+    ENSURE WEEKLY REPORTS PARENT PAGE
+=========================================================== */
 
-export const ensureReportsParentPage = async (conn, user) => {
-  // Create or return a single reports page id (under which weekly reports become subpages)
+export const ensureReportsParentPage = async (conn) => {
   if (conn.notionReportsPageId) return conn.notionReportsPageId;
 
   const body = {
     parent: { workspace: true },
     properties: {
-      title: { title: [{ text: { content: "AICOO Weekly Reports" } }] }
+      title: [
+        {
+          type: "text",
+          text: { content: "AICOO Weekly Reports" },
+        },
+      ],
     },
     children: [
       {
         object: "block",
         type: "paragraph",
-        paragraph: { text: [{ type: "text", text: { content: "Weekly reports for your EDUOO account." } }] }
-      }
-    ]
+        paragraph: {
+          text: [
+            {
+              type: "text",
+              text: {
+                content: "Weekly reports for your EDUOO account.",
+              },
+            },
+          ],
+        },
+      },
+    ],
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
@@ -145,8 +174,11 @@ export const ensureReportsParentPage = async (conn, user) => {
   return data.id;
 };
 
+/* ===========================================================
+    CREATE OR UPDATE GOAL PAGE
+=========================================================== */
+
 export const createOrUpdateGoalPage = async (conn, goal) => {
-  // Ensure DB exists
   const dbId = await ensureNotionDatabase(conn, { _id: goal.userId });
 
   const properties = {
@@ -154,25 +186,32 @@ export const createOrUpdateGoalPage = async (conn, goal) => {
     Status: { select: { name: goal.status || "active" } },
     Progress: { number: goal.progress || 0 },
     Target: { number: goal.target || 1 },
-    Deadline: goal.deadline ? { date: { start: goal.deadline.toISOString() } } : undefined,
-    Type: { rich_text: [{ text: { content: goal.type || "" } }] }
+    Deadline: goal.deadline
+      ? { date: { start: goal.deadline.toISOString() } }
+      : undefined,
+    Type: { rich_text: [{ text: { content: goal.type || "" } }] },
   };
 
-  // Remove undefined properties (Notion doesn't like them)
-  Object.keys(properties).forEach(k => properties[k] === undefined && delete properties[k]);
+  Object.keys(properties).forEach(
+    (k) => properties[k] === undefined && delete properties[k]
+  );
 
-  // If page exists, update it
+  // Update
   if (goal.notionPageId) {
-    const body = { properties };
-    const res = await fetch(`https://api.notion.com/v1/pages/${goal.notionPageId}`, {
-      method: "PATCH",
-      headers: NOTION_HEADERS(conn.accessToken),
-      body: JSON.stringify(body),
-    });
+    const res = await fetch(
+      `https://api.notion.com/v1/pages/${goal.notionPageId}`,
+      {
+        method: "PATCH",
+        headers: NOTION_HEADERS(conn.accessToken),
+        body: JSON.stringify({ properties }),
+      }
+    );
+
     if (!res.ok) {
       const txt = await res.text();
       throw new Error(`Notion update page failed: ${res.status} ${txt}`);
     }
+
     const data = await res.json();
     goal.syncedAt = new Date();
     goal.needsSync = false;
@@ -182,11 +221,21 @@ export const createOrUpdateGoalPage = async (conn, goal) => {
     return { id: data.id, url: data.url };
   }
 
-  // Create a new page in DB
+  // Create
   const body = {
     parent: { database_id: dbId },
     properties,
-    children: goal.description ? [{ object: "block", type: "paragraph", paragraph: { text: [{ type: "text", text: { content: goal.description } }] } }] : []
+    children: goal.description
+      ? [
+          {
+            object: "block",
+            type: "paragraph",
+            paragraph: {
+              text: [{ type: "text", text: { content: goal.description } }],
+            },
+          },
+        ]
+      : [],
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
@@ -211,30 +260,39 @@ export const createOrUpdateGoalPage = async (conn, goal) => {
   return { id: data.id, url: data.url };
 };
 
+/* ===========================================================
+    SYNC PENDING GOALS
+=========================================================== */
+
 export const syncPendingGoalsForUser = async (conn) => {
-  // Fetch goals with needsSync true for user
-  const pending = await Goal.find({ userId: conn.userId, needsSync: true });
+  const pending = await Goal.find({
+    userId: conn.userId,
+    needsSync: true,
+  });
+
   const results = [];
+
   for (const g of pending) {
     try {
       const r = await createOrUpdateGoalPage(conn, g);
       results.push({ goalId: g._id, page: r });
     } catch (err) {
       console.error("❌ syncPendingGoalsForUser error:", err.message);
-      // mark error on connection but continue
       conn.lastError = err.message.slice(0, 1000);
       await conn.save();
     }
   }
+
   return results;
 };
 
-/**
- * Create a daily dashboard row in a 'Daily Dashboard' database (we'll reuse the same DB or create another)
- * For simplicity we store daily rows in a database named 'AICOO Daily Dashboard'
- */
+/* ===========================================================
+    DAILY DASHBOARD
+=========================================================== */
+
 export const ensureDailyDashboardDatabase = async (conn) => {
-  if (conn.metadata && conn.metadata.dailyDashboardDbId) return conn.metadata.dailyDashboardDbId;
+  if (conn.metadata?.dailyDashboardDbId)
+    return conn.metadata.dailyDashboardDbId;
 
   const body = {
     parent: { workspace: true },
@@ -244,8 +302,8 @@ export const ensureDailyDashboardDatabase = async (conn) => {
       "GitHub Commits": { number: {} },
       "LeetCode Problems": { number: {} },
       "Spotify Focus Time (min)": { number: {} },
-      Notes: { rich_text: {} }
-    }
+      Notes: { rich_text: {} },
+    },
   };
 
   const res = await fetch("https://api.notion.com/v1/databases", {
@@ -267,15 +325,19 @@ export const ensureDailyDashboardDatabase = async (conn) => {
 
 export const createDailyDashboardRow = async (conn, row) => {
   const dbId = await ensureDailyDashboardDatabase(conn);
-  const properties = {
-    Date: { date: { start: (row.date || new Date()).toISOString() } },
-    "GitHub Commits": { number: row.commits || 0 },
-    "LeetCode Problems": { number: row.leetcode || 0 },
-    "Spotify Focus Time (min)": { number: row.spotifyMinutes || 0 },
-    Notes: { rich_text: [{ text: { content: row.notes || "" } }] }
-  };
 
-  const body = { parent: { database_id: dbId }, properties };
+  const body = {
+    parent: { database_id: dbId },
+    properties: {
+      Date: { date: { start: (row.date || new Date()).toISOString() } },
+      "GitHub Commits": { number: row.commits || 0 },
+      "LeetCode Problems": { number: row.leetcode || 0 },
+      "Spotify Focus Time (min)": { number: row.spotifyMinutes || 0 },
+      Notes: {
+        rich_text: [{ text: { content: row.notes || "" } }],
+      },
+    },
+  };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
@@ -288,47 +350,91 @@ export const createDailyDashboardRow = async (conn, row) => {
     throw new Error(`Notion create dashboard row failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
-  return { id: data.id, url: data.url };
+  return await res.json();
 };
 
-/**
- * Weekly report creation as a subpage under Reports parent page (user chose "append as subpage")
- */
+/* ===========================================================
+    WEEKLY REPORT PAGE
+=========================================================== */
+
 export const createWeeklyReportSubpage = async (conn, payload) => {
-  // payload: { startDate, endDate, summaryText, metrics: { github, leetcode, spotify, streaks } }
-  const parentId = await ensureReportsParentPage(conn, { _id: conn.userId });
+  const parentId = await ensureReportsParentPage(conn);
 
   const title = `Weekly Summary — ${payload.startDate.toLocaleDateString()} to ${payload.endDate.toLocaleDateString()}`;
-  const children = [
-    { object: "block", type: "heading_2", heading_2: { text: [{ type: "text", text: { content: title } }] } },
-    { object: "block", type: "paragraph", paragraph: { text: [{ type: "text", text: { content: payload.summaryText || "" } }] } },
-    {
-      object: "block",
-      type: "bulleted_list_item",
-      bulleted_list_item: { text: [{ type: "text", text: { content: `GitHub: ${payload.metrics.github || 0} commits` } }] }
-    },
-    {
-      object: "block",
-      type: "bulleted_list_item",
-      bulleted_list_item: { text: [{ type: "text", text: { content: `LeetCode: ${payload.metrics.leetcode || 0} problems` } }] }
-    },
-    {
-      object: "block",
-      type: "bulleted_list_item",
-      bulleted_list_item: { text: [{ type: "text", text: { content: `Spotify: ${payload.metrics.spotify || 0} minutes focus` } }] }
-    },
-    {
-      object: "block",
-      type: "bulleted_list_item",
-      bulleted_list_item: { text: [{ type: "text", text: { content: `Streaks: ${payload.metrics.streaks || "N/A"}` } }] }
-    }
-  ];
 
   const body = {
     parent: { page_id: parentId },
     properties: { title: [{ text: { content: title } }] },
-    children,
+    children: [
+      {
+        object: "block",
+        type: "heading_2",
+        heading_2: { text: [{ type: "text", text: { content: title } }] },
+      },
+      {
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          text: [{ type: "text", text: { content: payload.summaryText || "" } }],
+        },
+      },
+      {
+        object: "block",
+        type: "bulleted_list_item",
+        bulleted_list_item: {
+          text: [
+            {
+              type: "text",
+              text: {
+                content: `GitHub: ${payload.metrics.github || 0} commits`,
+              },
+            },
+          ],
+        },
+      },
+      {
+        object: "block",
+        type: "bulleted_list_item",
+        bulleted_list_item: {
+          text: [
+            {
+              type: "text",
+              text: {
+                content: `LeetCode: ${payload.metrics.leetcode || 0} problems`,
+              },
+            },
+          ],
+        },
+      },
+      {
+        object: "block",
+        type: "bulleted_list_item",
+        bulleted_list_item: {
+          text: [
+            {
+              type: "text",
+              text: {
+                content: `Spotify: ${payload.metrics.spotify || 0} minutes focus`,
+              },
+            },
+          ],
+        },
+      },
+      {
+        object: "block",
+        type: "bulleted_list_item",
+        bulleted_list_item: {
+          text: [
+            {
+              type: "text",
+              text: {
+                content: `Streaks: ${payload.metrics.streaks || "N/A"}`,
+              },
+            },
+          ],
+        },
+      },
+    ],
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
@@ -342,20 +448,37 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
     throw new Error(`Notion create weekly page failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
-  return { id: data.id, url: data.url };
+  return await res.json();
 };
 
-/**
- * Backup: create a top-level page with full content JSON (store as text)
- */
+/* ===========================================================
+    BACKUP PAGE (AUTO CREATE PARENT)
+=========================================================== */
+
 export const backupReportToNotion = async (conn, title, rawJson) => {
+  const parentId = await ensureReportsParentPage(conn);
+
   const body = {
-    parent: { type: "page_id", page_id: conn.notionReportsPageId || null },
-    properties: { title: [{ text: { content: title } }] },
+    parent: { page_id: parentId },
+    properties: {
+      title: [{ text: { content: title } }],
+    },
     children: [
-      { object: "block", type: "paragraph", paragraph: { text: [{ type: "text", text: { content: JSON.stringify(rawJson, null, 2).slice(0, 2000) } }] } }
-    ]
+      {
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          text: [
+            {
+              type: "text",
+              text: {
+                content: JSON.stringify(rawJson, null, 2).slice(0, 2000),
+              },
+            },
+          ],
+        },
+      },
+    ],
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
@@ -369,6 +492,5 @@ export const backupReportToNotion = async (conn, title, rawJson) => {
     throw new Error(`Notion backup page failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
-  return { id: data.id, url: data.url };
+  return await res.json();
 };
