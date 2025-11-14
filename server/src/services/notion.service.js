@@ -690,11 +690,9 @@ export const ensureHomePage = async (conn) => {
   if (conn.notionHomePageId) return conn.notionHomePageId;
 
   const body = {
-    parent: { type: "workspace", workspace: true },   // FIXED
-
+    parent: { workspace: true },
     icon: { type: "emoji", emoji: "📘" },
 
-    // Correct title schema
     properties: {
       title: {
         title: [
@@ -706,7 +704,6 @@ export const ensureHomePage = async (conn) => {
       }
     },
 
-    // Page content
     children: [
       {
         object: "block",
@@ -717,21 +714,8 @@ export const ensureHomePage = async (conn) => {
               type: "text",
               text: {
                 content:
-                  "Welcome! This is your EDUOO home — your central productivity hub."
+                  "Welcome to your central EDUOO productivity hub."
               }
-            }
-          ]
-        }
-      },
-
-      {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [
-            {
-              type: "text",
-              text: { content: "🎯 Your Databases" }
             }
           ]
         }
@@ -739,30 +723,29 @@ export const ensureHomePage = async (conn) => {
     ]
   };
 
+  console.log("📤 Creating Home Page:", JSON.stringify(body, null, 2));
+
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: NOTION_HEADERS(conn.accessToken),
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 
   const txt = await res.text();
+  console.log("📥 Home page response:", txt);
 
   if (!res.ok) {
     throw new Error(`Notion create home page failed: ${res.status} ${txt}`);
   }
 
-  let data;
-  try {
-    data = JSON.parse(txt);
-  } catch (err) {
-    throw new Error(`Home page parse failed: ${err.message}`);
-  }
+  const data = JSON.parse(txt);
 
   conn.notionHomePageId = data.id;
   await conn.save();
 
   return data.id;
 };
+
 
 
 
