@@ -42,6 +42,11 @@ const connectionSchema = new mongoose.Schema(
 
     /** When the connection was established */
     connectedAt: { type: Date, default: null },
+
+    // Notion-specific
+    botId: { type: String, default: null },
+    notionDatabaseId: { type: String, default: null }, // created DB id for goals/dashboard
+    notionReportsPageId: { type: String, default: null }, // top-level page to hold weekly subpages
   },
   { timestamps: true }
 );
