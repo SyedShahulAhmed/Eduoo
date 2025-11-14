@@ -1,4 +1,3 @@
-
 import fetch from "node-fetch";
 import Connection from "../models/Connection.js";
 import Goal from "../models/Goal.js";
@@ -22,27 +21,43 @@ const NOTION_HEADERS = (token) => ({
 export const fetchNotionUser = async (accessToken) => {
   try {
     const res = await fetch("https://api.notion.com/v1/users/me", {
+      method: "GET",
       headers: NOTION_HEADERS(accessToken),
     });
 
+    const txt = await res.text();
+
     if (!res.ok) {
-      const txt = await res.text();
+      // include Notion response body for debugging
       throw new Error(`Notion user fetch failed: ${res.status} ${txt}`);
     }
 
-    const data = await res.json();
+    // parse JSON (defensive)
+    let data;
+    try {
+      data = JSON.parse(txt);
+    } catch (parseErr) {
+      throw new Error(`Notion user parse failed: ${parseErr.message}`);
+    }
 
-    return {
-      id: data.id,
-      name: data.name || data.user?.name || "Notion User",
-      type: data.type,
-    };
+    // Normalise name/type across possible Notion shapes
+    const id = data.id;
+    const type =
+      data.type || (data.person ? "person" : data.user ? "user" : undefined);
+    const name =
+      // prefer top-level name, then nested shapes Notion sometimes returns
+      data.name ||
+      data.person?.name ||
+      data.user?.name ||
+      (data?.role ? data.role : undefined) ||
+      "Notion User";
+
+    return { id, name, type };
   } catch (err) {
     console.error("❌ fetchNotionUser Error:", err.message);
     throw err;
   }
 };
-
 /* ===========================================================
     SEARCH DATABASES
 =========================================================== */
@@ -53,25 +68,33 @@ export const searchNotionDatabases = async (accessToken) => {
       method: "POST",
       headers: NOTION_HEADERS(accessToken),
       body: JSON.stringify({
-        filter: { value: "database", property: "object" },
+        filter: { property: "object", value: "database" },
         page_size: 50,
       }),
     });
 
+    const txt = await res.text();
+
     if (!res.ok) {
-      const txt = await res.text();
       throw new Error(`Notion search failed: ${res.status} ${txt}`);
     }
 
-    const data = await res.json();
+    let data;
+    try {
+      data = JSON.parse(txt);
+    } catch (err) {
+      throw new Error(`Notion search parse failed: ${err.message}`);
+    }
 
-    return (data.results || []).map((r) => ({
-      id: r.id,
+    const dbs = (data.results || []).map((db) => ({
+      id: db.id,
       title:
-        r?.title?.[0]?.plain_text ||
-        r?.properties?.title?.title?.[0]?.plain_text ||
-        "Database",
+        db.title?.[0]?.plain_text ||
+        db.properties?.title?.title?.[0]?.plain_text ||
+        "Untitled Database",
     }));
+
+    return dbs;
   } catch (err) {
     console.error("❌ searchNotionDatabases Error:", err.message);
     throw err;
@@ -83,14 +106,26 @@ export const searchNotionDatabases = async (accessToken) => {
 =========================================================== */
 
 export const ensureNotionDatabase = async (conn, user) => {
+  // Already created? return it.
   if (conn.notionDatabaseId) return conn.notionDatabaseId;
 
+  // ✅ CORRECT Notion database creation format
   const body = {
-    parent: { workspace: true }, // VALID
+    parent: { type: "workspace", workspace: true }, // FIXED
     icon: { type: "emoji", emoji: "🎯" },
-    title: [{ type: "text", text: { content: "AICOO Goals" } }],
+
+    // Database title (Notion requires array)
+    title: [
+      {
+        type: "text",
+        text: { content: "AICOO Goals" },
+      },
+    ],
+
+    // Database properties
     properties: {
       Name: { title: {} },
+
       Status: {
         select: {
           options: [
@@ -100,6 +135,7 @@ export const ensureNotionDatabase = async (conn, user) => {
           ],
         },
       },
+
       Progress: { number: {} },
       Target: { number: {} },
       Deadline: { date: {} },
@@ -107,20 +143,30 @@ export const ensureNotionDatabase = async (conn, user) => {
     },
   };
 
+  // Create the DB
   const res = await fetch("https://api.notion.com/v1/databases", {
     method: "POST",
     headers: NOTION_HEADERS(conn.accessToken),
     body: JSON.stringify(body),
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion create database failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (e) {
+    throw new Error(`Notion DB parse failed: ${e.message}`);
+  }
+
+  // Save database ID
   conn.notionDatabaseId = data.id;
   await conn.save();
+
   return data.id;
 };
 
@@ -129,24 +175,31 @@ export const ensureNotionDatabase = async (conn, user) => {
 =========================================================== */
 
 export const ensureReportsParentPage = async (conn) => {
+  // Already exists? return it.
   if (conn.notionReportsPageId) return conn.notionReportsPageId;
 
+  // ✅ Correct Notion page creation shape
   const body = {
-    parent: { workspace: true },
+    parent: { type: "workspace", workspace: true }, // FIXED
+
     properties: {
-      title: [
-        {
-          type: "text",
-          text: { content: "AICOO Weekly Reports" },
-        },
-      ],
+      title: {
+        title: [
+          {
+            type: "text",
+            text: { content: "AICOO Weekly Reports" },
+          },
+        ],
+      },
     },
+
+    // Page content
     children: [
       {
         object: "block",
         type: "paragraph",
         paragraph: {
-          text: [
+          rich_text: [
             {
               type: "text",
               text: {
@@ -165,14 +218,23 @@ export const ensureReportsParentPage = async (conn) => {
     body: JSON.stringify(body),
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion create reports page failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (e) {
+    throw new Error(`Notion reports page parse failed: ${e.message}`);
+  }
+
+  // Save the parent page in DB
   conn.notionReportsPageId = data.id;
   await conn.save();
+
   return data.id;
 };
 
@@ -181,24 +243,60 @@ export const ensureReportsParentPage = async (conn) => {
 =========================================================== */
 
 export const createOrUpdateGoalPage = async (conn, goal) => {
+  // Ensure DB exists
   const dbId = await ensureNotionDatabase(conn, { _id: goal.userId });
 
+  /* ---------------------------------------------
+     BUILD NOTION PROPERTIES (CORRECT SCHEMA)
+  --------------------------------------------- */
   const properties = {
-    Name: { title: [{ text: { content: goal.title } }] },
-    Status: { select: { name: goal.status || "active" } },
-    Progress: { number: goal.progress || 0 },
-    Target: { number: goal.target || 1 },
+    Name: {
+      title: [
+        {
+          type: "text",
+          text: { content: goal.title },
+        },
+      ],
+    },
+
+    Status: {
+      select: { name: goal.status || "active" },
+    },
+
+    Progress: {
+      number: goal.progress || 0,
+    },
+
+    Target: {
+      number: goal.target || 1,
+    },
+
     Deadline: goal.deadline
-      ? { date: { start: goal.deadline.toISOString() } }
+      ? {
+          date: {
+            start: goal.deadline.toISOString(),
+          },
+        }
       : undefined,
-    Type: { rich_text: [{ text: { content: goal.type || "" } }] },
+
+    Type: {
+      rich_text: [
+        {
+          type: "text",
+          text: { content: goal.type || "" },
+        },
+      ],
+    },
   };
 
-  Object.keys(properties).forEach(
-    (k) => properties[k] === undefined && delete properties[k]
-  );
+  // Remove undefined keys (Notion rejects them)
+  Object.keys(properties).forEach((key) => {
+    if (properties[key] === undefined) delete properties[key];
+  });
 
-  // Update
+  /* ---------------------------------------------
+     UPDATE EXISTING PAGE
+  --------------------------------------------- */
   if (goal.notionPageId) {
     const res = await fetch(
       `https://api.notion.com/v1/pages/${goal.notionPageId}`,
@@ -209,31 +307,50 @@ export const createOrUpdateGoalPage = async (conn, goal) => {
       }
     );
 
+    const txt = await res.text();
+
     if (!res.ok) {
-      const txt = await res.text();
       throw new Error(`Notion update page failed: ${res.status} ${txt}`);
     }
 
-    const data = await res.json();
+    let data;
+    try {
+      data = JSON.parse(txt);
+    } catch (e) {
+      throw new Error(`Notion page update parse failed: ${e.message}`);
+    }
+
     goal.syncedAt = new Date();
     goal.needsSync = false;
     await goal.save();
+
     conn.lastSync = new Date();
     await conn.save();
+
     return { id: data.id, url: data.url };
   }
 
-  // Create
-  const body = {
+  /* ---------------------------------------------
+     CREATE NEW PAGE INSIDE DATABASE
+  --------------------------------------------- */
+  const createBody = {
     parent: { database_id: dbId },
+
     properties,
+
+    // Description block if present
     children: goal.description
       ? [
           {
             object: "block",
             type: "paragraph",
             paragraph: {
-              text: [{ type: "text", text: { content: goal.description } }],
+              rich_text: [
+                {
+                  type: "text",
+                  text: { content: goal.description },
+                },
+              ],
             },
           },
         ]
@@ -243,19 +360,27 @@ export const createOrUpdateGoalPage = async (conn, goal) => {
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: NOTION_HEADERS(conn.accessToken),
-    body: JSON.stringify(body),
+    body: JSON.stringify(createBody),
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion create page failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (e) {
+    throw new Error(`Notion page create parse failed: ${e.message}`);
+  }
+
   goal.notionPageId = data.id;
   goal.syncedAt = new Date();
   goal.needsSync = false;
   await goal.save();
+
   conn.lastSync = new Date();
   await conn.save();
 
@@ -267,6 +392,7 @@ export const createOrUpdateGoalPage = async (conn, goal) => {
 =========================================================== */
 
 export const syncPendingGoalsForUser = async (conn) => {
+  // Get all unsynced goals
   const pending = await Goal.find({
     userId: conn.userId,
     needsSync: true,
@@ -276,12 +402,26 @@ export const syncPendingGoalsForUser = async (conn) => {
 
   for (const g of pending) {
     try {
-      const r = await createOrUpdateGoalPage(conn, g);
-      results.push({ goalId: g._id, page: r });
+      if (!g) continue;
+
+      // Call the corrected Notion sync function
+      const pageInfo = await createOrUpdateGoalPage(conn, g);
+
+      results.push({
+        goalId: g._id,
+        page: pageInfo,
+      });
     } catch (err) {
       console.error("❌ syncPendingGoalsForUser error:", err.message);
-      conn.lastError = err.message.slice(0, 1000);
+
+      // Save truncated error to DB
+      conn.lastError = err.message.substring(0, 1000);
       await conn.save();
+
+      results.push({
+        goalId: g._id,
+        error: err.message,
+      });
     }
   }
 
@@ -293,17 +433,31 @@ export const syncPendingGoalsForUser = async (conn) => {
 =========================================================== */
 
 export const ensureDailyDashboardDatabase = async (conn) => {
-  if (conn.metadata?.dailyDashboardDbId)
+  // Already exists
+  if (conn.metadata?.dailyDashboardDbId) {
     return conn.metadata.dailyDashboardDbId;
+  }
 
+  // Create DB (correct schema)
   const body = {
-    parent: { workspace: true },
-    title: [{ type: "text", text: { content: "AICOO Daily Dashboard" } }],
+    parent: { type: "workspace", workspace: true }, // FIXED
+
+    title: [
+      {
+        type: "text",
+        text: { content: "AICOO Daily Dashboard" },
+      },
+    ],
+
     properties: {
       Date: { date: {} },
+
       "GitHub Commits": { number: {} },
+
       "LeetCode Problems": { number: {} },
+
       "Spotify Focus Time (min)": { number: {} },
+
       Notes: { rich_text: {} },
     },
   };
@@ -314,29 +468,65 @@ export const ensureDailyDashboardDatabase = async (conn) => {
     body: JSON.stringify(body),
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion create dashboard DB failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
-  conn.metadata = { ...(conn.metadata || {}), dailyDashboardDbId: data.id };
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (err) {
+    throw new Error(`Dashboard DB parse failed: ${err.message}`);
+  }
+
+  // Save to connection metadata
+  conn.metadata = {
+    ...(conn.metadata || {}),
+    dailyDashboardDbId: data.id,
+  };
+
   await conn.save();
+
   return data.id;
 };
 
 export const createDailyDashboardRow = async (conn, row) => {
+  // Ensure DB exists
   const dbId = await ensureDailyDashboardDatabase(conn);
 
   const body = {
     parent: { database_id: dbId },
+
     properties: {
-      Date: { date: { start: (row.date || new Date()).toISOString() } },
-      "GitHub Commits": { number: row.commits || 0 },
-      "LeetCode Problems": { number: row.leetcode || 0 },
-      "Spotify Focus Time (min)": { number: row.spotifyMinutes || 0 },
+      Date: {
+        date: {
+          start: (row.date || new Date()).toISOString(),
+        },
+      },
+
+      "GitHub Commits": {
+        number: row.commits || 0,
+      },
+
+      "LeetCode Problems": {
+        number: row.leetcode || 0,
+      },
+
+      "Spotify Focus Time (min)": {
+        number: row.spotifyMinutes || 0,
+      },
+
       Notes: {
-        rich_text: [{ text: { content: row.notes || "" } }],
+        rich_text: [
+          {
+            type: "text",
+            text: {
+              content: row.notes || "",
+            },
+          },
+        ],
       },
     },
   };
@@ -347,12 +537,20 @@ export const createDailyDashboardRow = async (conn, row) => {
     body: JSON.stringify(body),
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion create dashboard row failed: ${res.status} ${txt}`);
   }
 
-  return await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (err) {
+    throw new Error(`Dashboard row parse failed: ${err.message}`);
+  }
+
+  return data;
 };
 
 /* ===========================================================
@@ -366,25 +564,53 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
 
   const body = {
     parent: { page_id: parentId },
-    properties: { title: [{ text: { content: title } }] },
+
+    // CORRECT title property format
+    properties: {
+      title: {
+        title: [
+          {
+            type: "text",
+            text: { content: title },
+          },
+        ],
+      },
+    },
+
+    // FIXED BLOCK STRUCTURES
     children: [
       {
         object: "block",
         type: "heading_2",
-        heading_2: { text: [{ type: "text", text: { content: title } }] },
+        heading_2: {
+          rich_text: [
+            {
+              type: "text",
+              text: { content: title },
+            },
+          ],
+        },
       },
+
       {
         object: "block",
         type: "paragraph",
         paragraph: {
-          text: [{ type: "text", text: { content: payload.summaryText || "" } }],
+          rich_text: [
+            {
+              type: "text",
+              text: { content: payload.summaryText || "" },
+            },
+          ],
         },
       },
+
+      // GitHub
       {
         object: "block",
         type: "bulleted_list_item",
         bulleted_list_item: {
-          text: [
+          rich_text: [
             {
               type: "text",
               text: {
@@ -394,11 +620,13 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
           ],
         },
       },
+
+      // LeetCode
       {
         object: "block",
         type: "bulleted_list_item",
         bulleted_list_item: {
-          text: [
+          rich_text: [
             {
               type: "text",
               text: {
@@ -408,11 +636,13 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
           ],
         },
       },
+
+      // Spotify
       {
         object: "block",
         type: "bulleted_list_item",
         bulleted_list_item: {
-          text: [
+          rich_text: [
             {
               type: "text",
               text: {
@@ -422,11 +652,13 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
           ],
         },
       },
+
+      // Streaks
       {
         object: "block",
         type: "bulleted_list_item",
         bulleted_list_item: {
-          text: [
+          rich_text: [
             {
               type: "text",
               text: {
@@ -445,169 +677,247 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
     body: JSON.stringify(body),
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion create weekly page failed: ${res.status} ${txt}`);
   }
 
-  return await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (err) {
+    throw new Error(`Weekly report parse failed: ${err.message}`);
+  }
+
+  return data;
 };
 
 /* ===========================================================
     HOME PAGE (EDUOO Home) + LINK BLOCKS
 =========================================================== */
 
+
 export const ensureHomePage = async (conn) => {
   if (conn.notionHomePageId) return conn.notionHomePageId;
 
   const body = {
-    parent: { workspace: true },
+    parent: { type: "workspace", workspace: true },   // FIXED
+
     icon: { type: "emoji", emoji: "📘" },
+
+    // Correct title schema
     properties: {
-      title: [
-        {
-          type: "text",
-          text: { content: "EDUOO Home" },
-        },
-      ],
+      title: {
+        title: [
+          {
+            type: "text",
+            text: { content: "EDUOO Home" }
+          }
+        ]
+      }
     },
+
+    // Page content
     children: [
       {
         object: "block",
         type: "paragraph",
         paragraph: {
-          text: [
+          rich_text: [
             {
               type: "text",
               text: {
                 content:
-                  "Welcome! This is your EDUOO home — your central productivity hub.",
-              },
-            },
-          ],
-        },
+                  "Welcome! This is your EDUOO home — your central productivity hub."
+              }
+            }
+          ]
+        }
       },
+
       {
         object: "block",
         type: "heading_2",
         heading_2: {
-          text: [
+          rich_text: [
             {
               type: "text",
-              text: { content: "🎯 Your Databases" },
-            },
-          ],
-        },
-      },
-    ],
+              text: { content: "🎯 Your Databases" }
+            }
+          ]
+        }
+      }
+    ]
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: NOTION_HEADERS(conn.accessToken),
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion create home page failed: ${res.status} ${txt}`);
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (err) {
+    throw new Error(`Home page parse failed: ${err.message}`);
+  }
+
   conn.notionHomePageId = data.id;
   await conn.save();
+
   return data.id;
 };
+
+
 
 export const updateHomePageLinks = async (conn) => {
   const homeId = await ensureHomePage(conn);
 
   const blocks = [];
 
+  // Add Goals DB link
   if (conn.notionDatabaseId) {
     blocks.push({
       object: "block",
       type: "bookmark",
-      bookmark: { url: `https://www.notion.so/${conn.notionDatabaseId.replace(/-/g, "")}` },
+      bookmark: {
+        url: `https://www.notion.so/${conn.notionDatabaseId.replace(/-/g, "")}`
+      }
     });
   }
 
+  // Add Daily Dashboard DB link
   if (conn.metadata?.dailyDashboardDbId) {
     blocks.push({
       object: "block",
       type: "bookmark",
       bookmark: {
-        url: `https://www.notion.so/${conn.metadata.dailyDashboardDbId.replace(/-/g, "")}`,
-      },
+        url: `https://www.notion.so/${conn.metadata.dailyDashboardDbId.replace(
+          /-/g,
+          ""
+        )}`
+      }
     });
   }
 
+  // Add Reports Parent Page link
   if (conn.notionReportsPageId) {
     blocks.push({
       object: "block",
       type: "bookmark",
       bookmark: {
-        url: `https://www.notion.so/${conn.notionReportsPageId.replace(/-/g, "")}`,
-      },
+        url: `https://www.notion.so/${conn.notionReportsPageId.replace(
+          /-/g,
+          ""
+        )}`
+      }
     });
   }
 
+  // Nothing to add?
   if (blocks.length === 0) return;
 
-  const res = await fetch("https://api.notion.com/v1/blocks/" + homeId + "/children", {
-    method: "PATCH",
-    headers: NOTION_HEADERS(conn.accessToken),
-    body: JSON.stringify({ children: blocks }),
-  });
+  const body = {
+    children: blocks
+  };
+
+  const res = await fetch(
+    `https://api.notion.com/v1/blocks/${homeId}/children`,
+    {
+      method: "PATCH",
+      headers: NOTION_HEADERS(conn.accessToken),
+      body: JSON.stringify(body)
+    }
+  );
+
+  const txt = await res.text();
 
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Notion update home links failed: ${res.status} ${txt}`);
+    throw new Error(
+      `Notion update home links failed: ${res.status} ${txt}`
+    );
   }
 
-  return await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (err) {
+    throw new Error(`Home page link parse failed: ${err.message}`);
+  }
+
+  return data;
 };
 
 /* ===========================================================
     BACKUP PAGE (AUTO CREATE PARENT)
 =========================================================== */
 
+// notion.service.js (part 12)
+
 export const backupReportToNotion = async (conn, title, rawJson) => {
   const parentId = await ensureReportsParentPage(conn);
 
+  // Convert JSON to readable slice
+  const jsonText = JSON.stringify(rawJson, null, 2).slice(0, 2000);
+
   const body = {
     parent: { page_id: parentId },
+
+    // Correct Notion title format
     properties: {
-      title: [{ text: { content: title } }],
+      title: {
+        title: [
+          {
+            type: "text",
+            text: { content: title }
+          }
+        ]
+      }
     },
+
+    // JSON content
     children: [
       {
         object: "block",
         type: "paragraph",
         paragraph: {
-          text: [
+          rich_text: [
             {
               type: "text",
-              text: {
-                content: JSON.stringify(rawJson, null, 2).slice(0, 2000),
-              },
-            },
-          ],
-        },
-      },
-    ],
+              text: { content: jsonText }
+            }
+          ]
+        }
+      }
+    ]
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: NOTION_HEADERS(conn.accessToken),
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   });
 
+  const txt = await res.text();
+
   if (!res.ok) {
-    const txt = await res.text();
     throw new Error(`Notion backup page failed: ${res.status} ${txt}`);
   }
 
-  return await res.json();
+  let data;
+  try {
+    data = JSON.parse(txt);
+  } catch (err) {
+    throw new Error(`Backup parse failed: ${err.message}`);
+  }
+
+  return data;
 };
