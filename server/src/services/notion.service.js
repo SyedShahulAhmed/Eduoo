@@ -1,3 +1,4 @@
+
 import fetch from "node-fetch";
 import Connection from "../models/Connection.js";
 import Goal from "../models/Goal.js";
@@ -5,6 +6,7 @@ import { ENV } from "../config/env.js";
 
 /**
  * Minimal wrappers for Notion API calls used by the sync logic.
+ * Corrected parents and added EDUOO Home page + links + backup auto-create.
  */
 
 const NOTION_HEADERS = (token) => ({
@@ -446,6 +448,121 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`Notion create weekly page failed: ${res.status} ${txt}`);
+  }
+
+  return await res.json();
+};
+
+/* ===========================================================
+    HOME PAGE (EDUOO Home) + LINK BLOCKS
+=========================================================== */
+
+export const ensureHomePage = async (conn) => {
+  if (conn.notionHomePageId) return conn.notionHomePageId;
+
+  const body = {
+    parent: { workspace: true },
+    icon: { type: "emoji", emoji: "📘" },
+    properties: {
+      title: [
+        {
+          type: "text",
+          text: { content: "EDUOO Home" },
+        },
+      ],
+    },
+    children: [
+      {
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          text: [
+            {
+              type: "text",
+              text: {
+                content:
+                  "Welcome! This is your EDUOO home — your central productivity hub.",
+              },
+            },
+          ],
+        },
+      },
+      {
+        object: "block",
+        type: "heading_2",
+        heading_2: {
+          text: [
+            {
+              type: "text",
+              text: { content: "🎯 Your Databases" },
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  const res = await fetch("https://api.notion.com/v1/pages", {
+    method: "POST",
+    headers: NOTION_HEADERS(conn.accessToken),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Notion create home page failed: ${res.status} ${txt}`);
+  }
+
+  const data = await res.json();
+  conn.notionHomePageId = data.id;
+  await conn.save();
+  return data.id;
+};
+
+export const updateHomePageLinks = async (conn) => {
+  const homeId = await ensureHomePage(conn);
+
+  const blocks = [];
+
+  if (conn.notionDatabaseId) {
+    blocks.push({
+      object: "block",
+      type: "bookmark",
+      bookmark: { url: `https://www.notion.so/${conn.notionDatabaseId.replace(/-/g, "")}` },
+    });
+  }
+
+  if (conn.metadata?.dailyDashboardDbId) {
+    blocks.push({
+      object: "block",
+      type: "bookmark",
+      bookmark: {
+        url: `https://www.notion.so/${conn.metadata.dailyDashboardDbId.replace(/-/g, "")}`,
+      },
+    });
+  }
+
+  if (conn.notionReportsPageId) {
+    blocks.push({
+      object: "block",
+      type: "bookmark",
+      bookmark: {
+        url: `https://www.notion.so/${conn.notionReportsPageId.replace(/-/g, "")}`,
+      },
+    });
+  }
+
+  if (blocks.length === 0) return;
+
+  const res = await fetch("https://api.notion.com/v1/blocks/" + homeId + "/children", {
+    method: "PATCH",
+    headers: NOTION_HEADERS(conn.accessToken),
+    body: JSON.stringify({ children: blocks }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Notion update home links failed: ${res.status} ${txt}`);
   }
 
   return await res.json();

@@ -1,12 +1,18 @@
-// src/controllers/connections/notion.controller.js
+
 import fetch from "node-fetch";
 import jwt from "jsonwebtoken";
-import Connection from "../../models/Connection.js";
-import { ENV } from "../../config/env.js";
+import Connection from "../../../models/Connection.js";
+import { ENV } from "../../../config/env.js";
 import {
   fetchNotionUser,
   syncPendingGoalsForUser,
-} from "../../services/notion.service.js";
+  ensureNotionDatabase,
+  ensureReportsParentPage,
+  ensureDailyDashboardDatabase,
+  ensureHomePage,
+  updateHomePageLinks,
+} from "../../../services/notion.sync.service.js";
+
 /* =========================================================
    🔗 1. Redirect User → Notion OAuth (with debug logs)
    ========================================================= */
@@ -149,8 +155,28 @@ export const notionCallback = async (req, res) => {
 
     console.log("🟢 Notion connection saved to DB!");
 
+    // ===========================
+    //  AUTO CREATE DEFAULT STRUCTURE
+    // ===========================
+    const conn = await Connection.findOne({ userId, platform: "notion" });
+    console.log("🛠 Creating default Notion items...");
+
+    try {
+      await ensureNotionDatabase(conn, { _id: userId });
+      await ensureReportsParentPage(conn);
+      await ensureDailyDashboardDatabase(conn);
+
+      // Home page + links
+      await ensureHomePage(conn);
+      await updateHomePageLinks(conn);
+
+      console.log("🟢 All Notion default items created successfully!");
+    } catch (err) {
+      console.error("❌ Auto-create Notion structure failed:", err.message);
+    }
+
     return res.status(200).json({
-      message: "🎉 Notion connected successfully!",
+      message: "🎉 Notion connected & workspace prepared!",
       notion: tokenData,
     });
   } catch (err) {
