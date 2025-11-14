@@ -4,30 +4,35 @@ import jwt from "jsonwebtoken";
 import Connection from "../../models/Connection.js";
 import { ENV } from "../../config/env.js";
 import { fetchNotionUser, syncPendingGoalsForUser } from "../../services/notion.service.js";
-
 /* =========================================================
-   🔗 1. Redirect User → Notion OAuth
+   🔗 1. Redirect User → Notion OAuth (with debug logs)
    ========================================================= */
 export const connectNotion = async (req, res) => {
   try {
-    // JWT from header or query
     const token = req.headers.authorization?.split(" ")[1] || req.query.token;
 
-    if (!token) {
-      return res.status(401).json({ message: "❌ Authorization token missing" });
-    }
+    console.log("🔵 [CONNECT] Incoming JWT token:", token);
+    console.log("🔵 [CONNECT] SERVER_URL:", ENV.SERVER_URL);
+    console.log("🔵 [CONNECT] NOTION_CLIENT_ID:", ENV.NOTION_CLIENT_ID);
 
-    // MUST MATCH Notion dashboard
+    if (!token) return res.status(401).json({ message: "❌ Authorization token missing" });
+
     const redirectUri = `${ENV.SERVER_URL}/api/connections/notion/callback`;
+    console.log("🔵 [CONNECT] Redirect URI being sent to Notion:", redirectUri);
 
+    const state = `token_${token}`;
     const scopes = encodeURIComponent("users:read databases:read pages:write");
 
-    // State holds the JWT
-    const state = `token_${token}`;
+    const url =
+      `https://api.notion.com/v1/oauth/authorize` +
+      `?client_id=${ENV.NOTION_CLIENT_ID}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=code` +
+      `&owner=user` +
+      `&state=${state}` +
+      `&scope=${scopes}`;
 
-    const url = `https://api.notion.com/v1/oauth/authorize?client_id=${ENV.NOTION_CLIENT_ID}&redirect_uri=${encodeURIComponent(
-      redirectUri
-    )}&response_type=code&owner=user&state=${state}&scope=${scopes}`;
+    console.log("🔵 [CONNECT] Final Notion OAuth URL:", url);
 
     return res.redirect(url);
   } catch (err) {
@@ -38,31 +43,41 @@ export const connectNotion = async (req, res) => {
 
 
 /* =========================================================
-   🔁 2. OAuth Callback (Notion → Server)
+   🔁 2. OAuth Callback (DEBUG MODE)
    ========================================================= */
 export const notionCallback = async (req, res) => {
   try {
+    console.log("🟣 ================= CALLBACK HIT =================");
+    console.log("🟣 Query received from Notion:", req.query);
+
     const { code, state } = req.query;
 
-    if (!code) {
-      return res.status(400).json({ message: "❌ Missing Notion code" });
-    }
+    if (!code) return res.status(400).json({ message: "❌ Missing Notion code" });
 
-    // Extract token from state
     if (!state || !state.startsWith("token_")) {
+      console.log("🟥 BAD STATE:", state);
       return res.status(400).json({ message: "❌ Missing JWT token in state" });
     }
 
     const token = state.replace("token_", "");
 
-    // Decode the JWT → get userId
-    const decoded = jwt.verify(token, ENV.JWT_SECRET);
+    console.log("🟣 Extracted JWT:", token);
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, ENV.JWT_SECRET);
+      console.log("🟣 JWT Decoded:", decoded);
+    } catch (err) {
+      console.log("🟥 JWT VERIFY ERROR:", err.message);
+      return res.status(400).json({ message: "Invalid JWT in callback", err: err.message });
+    }
+
     const userId = decoded.id;
+    console.log("🟣 User ID extracted:", userId);
 
-    // MUST MATCH redirect URI EXACTLY (no ?token)
     const redirectUri = `${ENV.SERVER_URL}/api/connections/notion/callback`;
+    console.log("🟣 REDIRECT_URI used for token exchange:", redirectUri);
 
-    // Token exchange
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -70,6 +85,10 @@ export const notionCallback = async (req, res) => {
       client_id: ENV.NOTION_CLIENT_ID,
       client_secret: ENV.NOTION_CLIENT_SECRET,
     });
+
+    console.log("🟣 Sending token exchange request with payload:", body.toString());
+    console.log("🟣 CLIENT_ID:", ENV.NOTION_CLIENT_ID);
+    console.log("🟣 CLIENT_SECRET:", ENV.NOTION_CLIENT_SECRET ? "Present ✔️" : "Missing ❌");
 
     const tokenRes = await fetch("https://api.notion.com/v1/oauth/token", {
       method: "POST",
@@ -79,14 +98,21 @@ export const notionCallback = async (req, res) => {
 
     const tokenData = await tokenRes.json();
 
+    console.log("🟥 TOKEN RESPONSE STATUS:", tokenRes.status);
+    console.log("🟥 TOKEN RESPONSE BODY:", tokenData);
+
     if (!tokenData.access_token) {
       return res.status(400).json({
         message: "❌ Failed to exchange code for token",
         raw: tokenData,
+        debug: {
+          redirectUri,
+          clientId: ENV.NOTION_CLIENT_ID,
+          secretExists: !!ENV.NOTION_CLIENT_SECRET,
+        },
       });
     }
 
-    // Save in DB
     await Connection.findOneAndUpdate(
       { userId, platform: "notion" },
       {
@@ -98,16 +124,15 @@ export const notionCallback = async (req, res) => {
       { upsert: true }
     );
 
+    console.log("🟢 Notion connection saved to DB!");
+
     return res.status(200).json({
       message: "🎉 Notion connected successfully!",
       notion: tokenData,
     });
   } catch (err) {
-    console.error("❌ notionCallback Error:", err);
-    res.status(500).json({
-      message: "⚠️ Notion callback failed",
-      error: err.message,
-    });
+    console.error("❌ CALLBACK ERROR (FULL):", err);
+    res.status(500).json({ message: "⚠️ Callback failed", error: err.message });
   }
 };
 
