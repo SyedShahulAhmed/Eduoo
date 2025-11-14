@@ -76,12 +76,10 @@ export const searchNotionDatabases = async (accessToken) => {
 
 
 export const ensureNotionDatabase = async (conn, user) => {
-  // If connection already has notionDatabaseId, verify it exists; otherwise create DB
   if (conn.notionDatabaseId) return conn.notionDatabaseId;
 
-  // Create a simple database for goals with columns: Name (title), Status (select), Progress (number), Target (number), Deadline (date)
   const body = {
-    parent: { type: "user", user_id: conn.profileId || user._id.toString() }, // fallback
+    parent: { type: "workspace" }, // ✅ FIXED
     icon: { type: "emoji", emoji: "🎯" },
     title: [{ type: "text", text: { content: "AICOO Goals" } }],
     properties: {
@@ -111,12 +109,13 @@ export const ensureNotionDatabase = async (conn, user) => {
   return data.id;
 };
 
+
 export const ensureReportsParentPage = async (conn, user) => {
   // Create or return a single reports page id (under which weekly reports become subpages)
   if (conn.notionReportsPageId) return conn.notionReportsPageId;
 
   const body = {
-    parent: { type: "page_id", page_id: null }, // create top-level page (Notion requires a parent; use user page if needed)
+    parent: { workspace: true },
     properties: {
       title: { title: [{ text: { content: "AICOO Weekly Reports" } }] }
     },
@@ -238,7 +237,7 @@ export const ensureDailyDashboardDatabase = async (conn) => {
   if (conn.metadata && conn.metadata.dailyDashboardDbId) return conn.metadata.dailyDashboardDbId;
 
   const body = {
-    parent: { type: "user", user_id: conn.profileId || conn.userId.toString() },
+    parent: { workspace: true },
     title: [{ type: "text", text: { content: "AICOO Daily Dashboard" } }],
     properties: {
       Date: { date: {} },
