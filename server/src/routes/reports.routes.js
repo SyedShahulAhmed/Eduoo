@@ -89,6 +89,7 @@ import {
   createGoalsFromCodeforcesInsights,
 } from "../controllers/reports/codeforces.report.js";
 import { sendDailySummary } from "../controllers/reports/discord.report.js";
+import { getNotionAIInsights, getNotionReport, pushGoalToNotion } from "../controllers/reports/notion.report.js";
 
 // import {
 //   getLeetCodeReport,
@@ -130,10 +131,9 @@ router.get("/spotify/insights", authMiddleware, getSpotifyAIInsights);
 router.post("/spotify/goals", authMiddleware, createGoalsFromSpotifyInsights);
 
 // // ==================== 🧱 NOTION ====================
-// router.get("/notion", authMiddleware, getNotionReport);
-// router.get("/notion/insights", authMiddleware, getNotionAIInsights);
-// router.post("/notion/goals", authMiddleware, createGoalsFromNotionInsights);
-
+router.get("/notion", authMiddleware, getNotionReport);
+router.get("/notion/insights", authMiddleware, getNotionAIInsights);
+router.post("/notion/goals", authMiddleware, pushGoalToNotion);
 // // ==================== 📅 GOOGLE CALENDAR ====================
 // router.get("/google-calendar", authMiddleware, getGoogleCalendarReport);
 // router.get(
