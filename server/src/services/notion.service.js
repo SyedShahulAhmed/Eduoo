@@ -106,44 +106,38 @@ export const searchNotionDatabases = async (accessToken) => {
 =========================================================== */
 
 export const ensureNotionDatabase = async (conn, user) => {
-  // Already created? return it.
   if (conn.notionDatabaseId) return conn.notionDatabaseId;
 
-  // ✅ CORRECT Notion database creation format
   const body = {
-    parent: { type: "workspace", workspace: true }, // FIXED
+    parent: { workspace: true },   // ✔ ONLY THIS IS VALID FOR DATABASES
+
     icon: { type: "emoji", emoji: "🎯" },
 
-    // Database title (Notion requires array)
     title: [
       {
         type: "text",
-        text: { content: "AICOO Goals" },
-      },
+        text: { content: "AICOO Goals" }
+      }
     ],
 
-    // Database properties
     properties: {
       Name: { title: {} },
-
       Status: {
         select: {
           options: [
             { name: "active" },
             { name: "completed" },
-            { name: "paused" },
-          ],
-        },
+            { name: "paused" }
+          ]
+        }
       },
-
       Progress: { number: {} },
       Target: { number: {} },
       Deadline: { date: {} },
-      Type: { rich_text: {} },
-    },
+      Type: { rich_text: {} }
+    }
   };
 
-  // Create the DB
   const res = await fetch("https://api.notion.com/v1/databases", {
     method: "POST",
     headers: NOTION_HEADERS(conn.accessToken),
@@ -156,14 +150,8 @@ export const ensureNotionDatabase = async (conn, user) => {
     throw new Error(`Notion create database failed: ${res.status} ${txt}`);
   }
 
-  let data;
-  try {
-    data = JSON.parse(txt);
-  } catch (e) {
-    throw new Error(`Notion DB parse failed: ${e.message}`);
-  }
+  const data = JSON.parse(txt);
 
-  // Save database ID
   conn.notionDatabaseId = data.id;
   await conn.save();
 
