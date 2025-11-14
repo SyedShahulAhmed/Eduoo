@@ -3,7 +3,10 @@ import fetch from "node-fetch";
 import jwt from "jsonwebtoken";
 import Connection from "../../models/Connection.js";
 import { ENV } from "../../config/env.js";
-import { fetchNotionUser, syncPendingGoalsForUser } from "../../services/notion.service.js";
+import {
+  fetchNotionUser,
+  syncPendingGoalsForUser,
+} from "../../services/notion.service.js";
 /* =========================================================
    🔗 1. Redirect User → Notion OAuth (with debug logs)
    ========================================================= */
@@ -15,7 +18,10 @@ export const connectNotion = async (req, res) => {
     console.log("🔵 [CONNECT] SERVER_URL:", ENV.SERVER_URL);
     console.log("🔵 [CONNECT] NOTION_CLIENT_ID:", ENV.NOTION_CLIENT_ID);
 
-    if (!token) return res.status(401).json({ message: "❌ Authorization token missing" });
+    if (!token)
+      return res
+        .status(401)
+        .json({ message: "❌ Authorization token missing" });
 
     const redirectUri = `${ENV.SERVER_URL}/api/connections/notion/callback`;
     console.log("🔵 [CONNECT] Redirect URI being sent to Notion:", redirectUri);
@@ -37,10 +43,11 @@ export const connectNotion = async (req, res) => {
     return res.redirect(url);
   } catch (err) {
     console.error("❌ connectNotion Error:", err);
-    res.status(500).json({ message: "⚠️ Notion connect failed", error: err.message });
+    res
+      .status(500)
+      .json({ message: "⚠️ Notion connect failed", error: err.message });
   }
 };
-
 
 /* =========================================================
    🔁 2. OAuth Callback (DEBUG MODE)
@@ -52,7 +59,8 @@ export const notionCallback = async (req, res) => {
 
     const { code, state } = req.query;
 
-    if (!code) return res.status(400).json({ message: "❌ Missing Notion code" });
+    if (!code)
+      return res.status(400).json({ message: "❌ Missing Notion code" });
 
     if (!state || !state.startsWith("token_")) {
       console.log("🟥 BAD STATE:", state);
@@ -69,7 +77,9 @@ export const notionCallback = async (req, res) => {
       console.log("🟣 JWT Decoded:", decoded);
     } catch (err) {
       console.log("🟥 JWT VERIFY ERROR:", err.message);
-      return res.status(400).json({ message: "Invalid JWT in callback", err: err.message });
+      return res
+        .status(400)
+        .json({ message: "Invalid JWT in callback", err: err.message });
     }
 
     const userId = decoded.id;
@@ -86,13 +96,26 @@ export const notionCallback = async (req, res) => {
       client_secret: ENV.NOTION_CLIENT_SECRET,
     });
 
-    console.log("🟣 Sending token exchange request with payload:", body.toString());
+    console.log(
+      "🟣 Sending token exchange request with payload:",
+      body.toString()
+    );
     console.log("🟣 CLIENT_ID:", ENV.NOTION_CLIENT_ID);
-    console.log("🟣 CLIENT_SECRET:", ENV.NOTION_CLIENT_SECRET ? "Present ✔️" : "Missing ❌");
+    console.log(
+      "🟣 CLIENT_SECRET:",
+      ENV.NOTION_CLIENT_SECRET ? "Present ✔️" : "Missing ❌"
+    );
+
+    const authHeader = Buffer.from(
+      `${ENV.NOTION_CLIENT_ID}:${ENV.NOTION_CLIENT_SECRET}`
+    ).toString("base64");
 
     const tokenRes = await fetch("https://api.notion.com/v1/oauth/token", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${authHeader}`,
+      },
       body: body.toString(),
     });
 
@@ -136,7 +159,6 @@ export const notionCallback = async (req, res) => {
   }
 };
 
-
 /* =========================================================
    🔌 3. Disconnect
    ========================================================= */
@@ -161,7 +183,6 @@ export const disconnectNotion = async (req, res) => {
     });
   }
 };
-
 
 /* =========================================================
    🧪 4. Check Connection Status
@@ -202,7 +223,6 @@ export const checkNotionConnection = async (req, res) => {
     });
   }
 };
-
 
 /* =========================================================
    ⚡ 5. Manual Sync Pending Goals
