@@ -1,126 +1,176 @@
 // src/controllers/reports/notion.report.js
-import fetch from "node-fetch";
-import Connection from "../../models/Connection.js";
-import { ENV } from "../../config/env.js";
-import { fetchNotionUser, searchNotionDatabases, createNotionPage } from "../../services/notion.service.js";
-import Goal from "../../models/Goal.js";
 
-/**
- * Get Notion "report": list accessible databases and basic user info
- */
+import Connection from "../../models/Connection.js";
+import Goal from "../../models/Goal.js";
+import { createOrUpdateGoalPage } from "../../services/notion.service.js";
+import {
+  fetchNotionUser,
+  searchNotionDatabases,
+} from "../../services/notion.service.js";
+import { ENV } from "../../config/env.js";
+
+/* ===========================================================
+   📊 1) GET BASIC NOTION REPORT  
+   - Returns Notion user info
+   - Returns list of databases user has access to
+   =========================================================== */
+
 export const getNotionReport = async (req, res) => {
   try {
-    const conn = await Connection.findOne({ userId: req.user.id, platform: "notion" });
-    if (!conn?.accessToken) return res.status(400).json({ message: "Notion not connected" });
+    const conn = await Connection.findOne({
+      userId: req.user.id,
+      platform: "notion",
+    });
 
-    const user = await fetchNotionUser(conn.accessToken);
-    const dbs = await searchNotionDatabases(conn.accessToken);
+    if (!conn?.accessToken)
+      return res.status(400).json({ message: "Notion not connected" });
 
-    res.status(200).json({
-      message: "Notion report generated successfully",
-      report: {
-        user,
-        databases: dbs,
-      },
+    // Fetch Notion user profile
+    const notionUser = await fetchNotionUser(conn.accessToken);
+
+    // Fetch all accessible Notion databases
+    const databases = await searchNotionDatabases(conn.accessToken);
+
+    return res.status(200).json({
+      message: "Notion report fetched",
+      notionUser,
+      databases,
     });
   } catch (err) {
-    console.error("❌ getNotionReport Error:", err);
-    res.status(500).json({ message: "Failed to fetch Notion report", error: err.message });
+    console.error("❌ getNotionReport Error:", err.message);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch Notion report", error: err.message });
   }
 };
 
-/**
- * Push a single AICOO Goal into Notion as a page (or create in specified DB)
- * Body: { goalId, databaseId (optional) }
- */
+/* ===========================================================
+   🤖 2) GET NOTION AI INSIGHTS
+   - Very simple AI to give suggestions
+   - Uses Gemini if available
+   =========================================================== */
+
+export const getNotionAIInsights = async (req, res) => {
+  try {
+    const conn = await Connection.findOne({
+      userId: req.user.id,
+      platform: "notion",
+    });
+
+    if (!conn?.accessToken)
+      return res.status(400).json({ message: "Notion not connected" });
+
+    const databases = await searchNotionDatabases(conn.accessToken);
+
+    const prompt = `
+You are AICOO AI. Give insights to organize productivity data inside Notion.
+
+User has access to ${databases.length} databases.
+
+Return JSON with:
+{
+ "insights": ["tip1","tip2","tip3"],
+ "recommendations": ["one","two","three"],
+ "motivation": "1 sentence"
+}
+`;
+
+    let output = null;
+
+    if (ENV.GEMINI_API_KEY) {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        }
+      );
+
+      const data = await resp.json();
+      output = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    }
+
+    if (!output) {
+      // fallback JSON
+      output = JSON.stringify({
+        insights: [
+          "Organize EDUOO goals into a single Notion database.",
+          "Use properties like Status, Progress and Type to filter easily.",
+          "Create a weekly page where EDUOO syncs summaries.",
+        ],
+        recommendations: [
+          "Push all active goals to the 'EDUOO Goals' database.",
+          "Use views: 'Completed', 'Active', 'This Week'.",
+          "Let EDUOO sync a daily dashboard row every night.",
+        ],
+        motivation: "Small improvements every day create massive progress.",
+      });
+    }
+
+    output = output.replace(/```json|```/g, "");
+    const parsed = JSON.parse(output);
+
+    return res.status(200).json({
+      message: "Notion AI insights generated",
+      data: parsed,
+    });
+  } catch (err) {
+    console.error("❌ getNotionAIInsights Error:", err.message);
+    res
+      .status(500)
+      .json({ message: "Failed to generate insights", error: err.message });
+  }
+};
+
+/* ===========================================================
+   🎯 3) PUSH A GOAL TO NOTION
+   - Creates/Updates a Notion page inside user's DB
+   =========================================================== */
+
 export const pushGoalToNotion = async (req, res) => {
   try {
     const { goalId, databaseId } = req.body;
-    if (!goalId) return res.status(400).json({ message: "Missing goalId in body" });
 
-    const conn = await Connection.findOne({ userId: req.user.id, platform: "notion" });
-    if (!conn?.accessToken) return res.status(400).json({ message: "Notion not connected" });
+    if (!goalId)
+      return res.status(400).json({ message: "Missing goalId in body" });
 
-    const goal = await Goal.findOne({ _id: goalId, userId: req.user.id });
-    if (!goal) return res.status(404).json({ message: "Goal not found" });
-
-    // Create Notion page from goal
-    const page = await createNotionPage(conn.accessToken, {
-      databaseId,
-      title: goal.title,
-      properties: {
-        Status: goal.status || "active",
-        Type: goal.type || "weekly",
-        Progress: goal.progress || 0,
-        Target: goal.target || 1,
-      },
-      content: goal.description || "",
+    const conn = await Connection.findOne({
+      userId: req.user.id,
+      platform: "notion",
     });
 
-    res.status(201).json({ message: "Goal pushed to Notion", page });
-  } catch (err) {
-    console.error("❌ pushGoalToNotion Error:", err);
-    res.status(500).json({ message: "Failed to push goal to Notion", error: err.message });
-  }
-};
+    if (!conn?.accessToken)
+      return res.status(400).json({ message: "Notion not connected" });
 
-/**
- * Generate AI insights based on Notion pages/databases (optional)
- * For example, analyze goal pages and suggest improvements
- */
-export const getNotionAIInsights = async (req, res) => {
-  try {
-    const conn = await Connection.findOne({ userId: req.user.id, platform: "notion" });
-    if (!conn?.accessToken) return res.status(400).json({ message: "Notion not connected" });
+    const goal = await Goal.findOne({
+      _id: goalId,
+      userId: req.user.id,
+    });
 
-    // Fetch user's goal pages from Notion (search by AICOO tag or database - simplified)
-    const dbs = await searchNotionDatabases(conn.accessToken);
-    const sampleDb = dbs?.[0];
-    const prompt = `
-You are AICOO, assist the user optimize their Notion goals and pages.
+    if (!goal) return res.status(404).json({ message: "Goal not found" });
 
-Notion user: ${conn.userId}
-Sample DB: ${sampleDb?.title || "none"}
-
-Return JSON:
-{ "insights": ["3 quick suggestions about structuring goals in Notion"], "recommendations": ["3 action items"], "motivation": "short motivational line" }`;
-
-    // Call Gemini if available; fallback if not
-    let gemData = null;
-    if (ENV.GEMINI_API_KEY) {
-      const gemRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${ENV.GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      });
-      gemData = await gemRes.json();
+    // If user wants a custom DB
+    if (databaseId) {
+      conn.metadata = {
+        ...(conn.metadata || {}),
+        notionDatabaseId: databaseId,
+      };
+      await conn.save();
     }
 
-    let textOutput = gemData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-    if (!textOutput) {
-      textOutput = JSON.stringify({
-        insights: [
-          "Group related goals in a single database to track progress consistently.",
-          "Use properties for priority and target date for easy filtering.",
-          "Add a short weekly review checkbox to measure momentum.",
-        ],
-        recommendations: [
-          "Create a 'Weekly Goals' DB and push AICOO weekly goals there automatically.",
-          "Use a 'Progress' numeric property and visualize it in Notion views.",
-          "Add automation (Zapier/Make) to sync completed goals back to AICOO.",
-        ],
-        motivation: "A tidy system reduces friction — keep your goals visible and achievable!",
-      });
-    } else {
-      textOutput = textOutput.replace(/```json|```/g, "").trim();
-    }
+    const page = await createOrUpdateGoalPage(conn, goal);
 
-    let parsed;
-    try { parsed = JSON.parse(textOutput); } catch { parsed = JSON.parse(textOutput || "{}"); }
-
-    res.status(200).json({ message: "Notion AI insights generated", data: parsed });
+    return res.status(201).json({
+      message: "Goal pushed to Notion",
+      page,
+    });
   } catch (err) {
-    console.error("❌ getNotionAIInsights Error:", err);
-    res.status(500).json({ message: "Failed to generate Notion insights", error: err.message });
+    console.error("❌ pushGoalToNotion Error:", err.message);
+    res
+      .status(500)
+      .json({ message: "Failed to push goal", error: err.message });
   }
 };
