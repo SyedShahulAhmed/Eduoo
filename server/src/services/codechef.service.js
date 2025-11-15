@@ -2,6 +2,13 @@ import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
 export const fetchCodechefData = async (username) => {
+  if (
+    html.includes("cf-browser-verification") ||
+    html.includes("Access denied")
+  ) {
+    throw new Error("CodeChef blocked the request");
+  }
+
   try {
     const res = await fetch(`https://www.codechef.com/users/${username}`);
     if (!res.ok) throw new Error("Profile not found");
@@ -12,7 +19,8 @@ export const fetchCodechefData = async (username) => {
     const name = $(".user-name").text().trim() || username;
     const stars = $(".rating").first().text().trim() || "Unrated";
     const rating = $(".rating-number").first().text().trim() || "0";
-    const highestRating = $(".rating-header small").text().replace(/[()]/g, "").trim() || "N/A";
+    const highestRating =
+      $(".rating-header small").text().replace(/[()]/g, "").trim() || "N/A";
 
     const ranks = $(".rating-ranks ul li");
     const globalRank = $(ranks[0]).find("strong").text().trim() || "N/A";

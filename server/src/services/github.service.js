@@ -9,16 +9,26 @@ export const fetchGitHubData = async (accessToken) => {
     const user = await userRes.json();
 
     // 2️⃣ Repositories
-    const repoRes = await fetch("https://api.github.com/user/repos?per_page=100&type=owner", { headers });
+    const repoRes = await fetch(
+      "https://api.github.com/user/repos?per_page=100&type=owner",
+      { headers }
+    );
     const repos = await repoRes.json();
 
     // 3️⃣ Recent public events (commits, pushes, etc.)
-    const eventsRes = await fetch(`https://api.github.com/users/${user.login}/events`, { headers });
+    const eventsRes = await fetch(
+      `https://api.github.com/users/${user.login}/events`,
+      { headers }
+    );
     const events = await eventsRes.json();
-    const commitEvents = events.filter((e) => e.type === "PushEvent");
+    const commitEvents = Array.isArray(events)
+      ? events.filter((e) => e.type === "PushEvent")
+      : [];
 
     // Extract commit timestamps
-    const commitDates = commitEvents.map((e) => new Date(e.created_at).toISOString().split("T")[0]);
+    const commitDates = commitEvents.map(
+      (e) => new Date(e.created_at).toISOString().split("T")[0]
+    );
     const uniqueDates = [...new Set(commitDates)].sort();
 
     // 4️⃣ Calculate streaks
@@ -45,7 +55,9 @@ export const fetchGitHubData = async (accessToken) => {
     // 5️⃣ Commits in last 30 days
     const now = new Date();
     const last30 = new Date(now.setDate(now.getDate() - 30));
-    const recentCommits = commitDates.filter((d) => new Date(d) >= last30).length;
+    const recentCommits = commitDates.filter(
+      (d) => new Date(d) >= last30
+    ).length;
 
     // 6️⃣ Collect top languages
     const languages = {};

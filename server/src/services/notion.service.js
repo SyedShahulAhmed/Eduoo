@@ -549,71 +549,58 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
 
   const title = `Weekly Summary — ${payload.startDate.toLocaleDateString()} to ${payload.endDate.toLocaleDateString()}`;
 
-  const m = payload.metrics;
-  const connected = payload.connections; // { github: connObj, ... }
+  const metrics = payload.metrics;
+  const connected = payload.connections;
 
-  // === CONDITIONAL METRIC BLOCKS ===
   const metricBlocks = [];
 
-  if (m.github != null) {
-    metricBlocks.push(makeBullet(`🐙 GitHub: ${m.github} commits`));
+  if (metrics.github) {
+    metricBlocks.push(makeBullet(`🐙 GitHub Commits: ${metrics.github.commits}`));
+  }
+  if (metrics.leetcode) {
+    metricBlocks.push(makeBullet(`🧩 LeetCode Solved: ${metrics.leetcode.solved}`));
+  }
+  if (metrics.spotify) {
+    metricBlocks.push(makeBullet(`🎧 Spotify Focus: ${metrics.spotify.minutes} minutes`));
+  }
+  if (metrics.codeforces) {
+    metricBlocks.push(makeBullet(`🏆 Codeforces Rating Change: ${metrics.codeforces.ratingChange}`));
+  }
+  if (metrics.codechef) {
+    metricBlocks.push(makeBullet(`🍽️ CodeChef Rating: ${metrics.codechef.rating}`));
+  }
+  if (metrics.duolingo) {
+    metricBlocks.push(makeBullet(`🦉 Duolingo Streak: ${metrics.duolingo.streak} days`));
   }
 
-  if (m.leetcode != null) {
-    metricBlocks.push(makeBullet(`🧩 LeetCode: ${m.leetcode} problems`));
-  }
-
-  if (m.spotify != null) {
-    metricBlocks.push(makeBullet(`🎧 Spotify Focus: ${m.spotify} minutes`));
-  }
-
-  if (m.codeforces != null) {
-    metricBlocks.push(makeBullet(`🏆 Codeforces: ${m.codeforces.ratingChange} rating change`));
-  }
-
-  if (m.codechef != null) {
-    metricBlocks.push(makeBullet(`🍽️ CodeChef: ${m.codechef.ratingChange} rating change`));
-  }
-
-  // === AI RECOMMENDATIONS FOR CONNECTED PLATFORMS ===
   const recoBlocks = [];
 
   for (const platform of Object.keys(connected)) {
-    if (!m[platform]) continue; // skip if no metrics
+    if (!metrics[platform]) continue;
 
-    const reco = await generateOneLineReco(platform, m[platform]);
-    recoBlocks.push(makeBullet(`💡 ${platform.toUpperCase()}: ${reco}`));
+    const aiReco = await generateOneLineReco(platform, metrics[platform]);
+    recoBlocks.push(makeBullet(`💡 ${platform.toUpperCase()}: ${aiReco}`));
   }
 
-  // === BUILD NOTION PAGE BODY ===
   const body = {
     parent: { page_id: parentId },
-
-    icon: { type: "emoji", emoji: "📝" },
+    icon: { type: "emoji", emoji: "📘" },
 
     properties: {
       title: {
-        title: [
-          {
-            type: "text",
-            text: { content: title }
-          }
-        ]
-      }
+        title: [{ type: "text", text: { content: title } }],
+      },
     },
 
     children: [
-      // HEADER
       makeHeading(`📅 ${title}`),
 
-      // ACTIVITY BREAKDOWN
       makeHeading("📊 Activity Breakdown"),
       ...metricBlocks,
 
-      // RECOMMENDATIONS
       makeHeading("✨ Recommendations for Next Week"),
       ...recoBlocks,
-    ]
+    ],
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
@@ -625,11 +612,12 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
   const txt = await res.text();
 
   if (!res.ok) {
-    throw new Error(`Notion create weekly page failed: ${res.status} ${txt}`);
+    throw new Error(`Notion weekly page failed: ${res.status} ${txt}`);
   }
 
   return JSON.parse(txt);
 };
+
 
 // UTILITIES
 const makeHeading = (text) => ({
