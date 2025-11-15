@@ -2,12 +2,7 @@ import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
 export const fetchCodechefData = async (username) => {
-  if (
-    html.includes("cf-browser-verification") ||
-    html.includes("Access denied")
-  ) {
-    throw new Error("CodeChef blocked the request");
-  }
+
 
   try {
     const res = await fetch(`https://www.codechef.com/users/${username}`);
