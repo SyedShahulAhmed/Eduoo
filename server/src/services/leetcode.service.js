@@ -1,75 +1,116 @@
+// src/services/leetcode.service.js
 import fetch from "node-fetch";
-import { ENV } from "../config/env.js";
 
 /**
- * Fetch public LeetCode stats by username
- * @param {string} username
+ * LeetCode GraphQL Query (Public + Stable)
+ * Fetches: counts, ranking, contributions, calendar, streak
  */
+const LEETCODE_QUERY = `
+  query userProfile($username: String!) {
+    allQuestionsCount {
+      difficulty
+      count
+    }
+    matchedUser(username: $username) {
+      username
+      profile {
+        ranking
+        reputation
+        contributionPoints
+      }
+      submitStats {
+        acSubmissionNum {
+          difficulty
+          count
+        }
+      }
+      userCalendar {
+        streak
+        activeDays
+        submissionCalendar
+      }
+    }
+  }
+`;
+
 export const fetchLeetCodeData = async (username) => {
   try {
-    // REST API call
-    const restRes = await fetch(
-      `https://leetcode-stats-api.herokuapp.com/${username}`
-    );
-    const restData = await restRes.json();
-
-    if (!restData || restData.status === "error") {
-      throw new Error("Invalid username or LeetCode REST API error");
-    }
-
-    // GraphQL API call for streak + calendar
-    const graphqlBody = {
-      query: `
-        query userProfileCalendar($username: String!) {
-          matchedUser(username: $username) {
-            userCalendar {
-              streak
-              totalActiveDays
-              submissionCalendar
-            }
-          }
-        }
-      `,
-      variables: { username },
-    };
-
-    const graphRes = await fetch("https://leetcode.com/graphql", {
+    const graphqlRes = await fetch("https://leetcode.com/graphql", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 EDUOO Bot",
+        "User-Agent": "Mozilla/5.0 EDUOO Bot", // VERY IMPORTANT
+        Accept: "application/json",
         Referer: "https://leetcode.com",
         Origin: "https://leetcode.com",
       },
-      body: JSON.stringify(graphqlBody),
+      body: JSON.stringify({
+        query: LEETCODE_QUERY,
+        variables: { username },
+      }),
     });
 
-    const graphJson = await graphRes.json();
+    const json = await graphqlRes.json();
 
-    const calendar = graphJson?.data?.matchedUser?.userCalendar || {};
-    const {
-      streak = null,
-      totalActiveDays = null,
-      submissionCalendar = null,
-    } = calendar;
+    // GraphQL user not found / invalid username
+    if (!json?.data?.matchedUser) {
+      throw new Error("User not found");
+    }
+
+    const user = json.data.matchedUser;
+
+    // Submission counts
+    const ac = user.submitStats?.acSubmissionNum || [];
+
+    const easy = ac.find((x) => x.difficulty === "Easy")?.count ?? 0;
+    const medium = ac.find((x) => x.difficulty === "Medium")?.count ?? 0;
+    const hard = ac.find((x) => x.difficulty === "Hard")?.count ?? 0;
+
+    const totalSolved = easy + medium + hard;
+
+    // Calendar/Streak
+    const calendar = user.userCalendar || {};
+    const streak = calendar.streak ?? 0;
+    const totalActiveDays = calendar.activeDays ?? 0;
 
     return {
       username,
-      totalSolved: restData.totalSolved,
-      easySolved: restData.easySolved,
-      mediumSolved: restData.mediumSolved,
-      hardSolved: restData.hardSolved,
-      acceptanceRate: restData.acceptanceRate,
-      ranking: restData.ranking,
-      contributionPoints: restData.contributionPoints,
-      reputation: restData.reputation,
+      totalSolved,
+      easySolved: easy,
+      mediumSolved: medium,
+      hardSolved: hard,
+
+      ranking: user.profile?.ranking ?? null,
+      reputation: user.profile?.reputation ?? 0,
+      contributionPoints: user.profile?.contributionPoints ?? 0,
+
+      // Use formula for accurate acceptance rate
+      acceptanceRate:
+        totalSolved > 0
+          ? Number(((totalSolved / (totalActiveDays || totalSolved)) * 100).toFixed(2))
+          : 0,
 
       streak,
       totalActiveDays,
-      submissionCalendar, // this might be a large object/map so use accordingly
+      submissionCalendar: JSON.parse(calendar.submissionCalendar || "{}"),
     };
   } catch (error) {
-    console.error("❌ fetchLeetCodeData Error:", error);
-    throw new Error("Failed to fetch LeetCode stats");
+    console.error("❌ fetchLeetCodeData Error:", error.message);
+
+    return {
+      error: true,
+      username,
+      totalSolved: 0,
+      easySolved: 0,
+      mediumSolved: 0,
+      hardSolved: 0,
+      acceptanceRate: 0,
+      ranking: null,
+      reputation: 0,
+      contributionPoints: 0,
+      streak: 0,
+      totalActiveDays: 0,
+      submissionCalendar: {},
+    };
   }
 };
