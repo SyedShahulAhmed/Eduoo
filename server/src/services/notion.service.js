@@ -108,30 +108,41 @@ export const searchNotionDatabases = async (accessToken) => {
 export const ensureNotionDatabase = async (conn, user) => {
   if (conn.notionDatabaseId) return conn.notionDatabaseId;
 
+  // FIX: ensure parent page exists
+  const homePageId = await ensureHomePage(conn);
+
   const body = {
-    parent: { workspace: true }, // REQUIRED for database creation
+    parent: { page_id: homePageId }, // FIXED ✔
     icon: { type: "emoji", emoji: "🎯" },
-    title: [{ type: "text", text: { content: "AICOO Goals" } }],
+
+    title: [
+      {
+        type: "text",
+        text: { content: "AICOO Goals" },
+      },
+    ],
+
     properties: {
       Name: { title: {} },
+
       Status: {
         select: {
-          options: [{ name: "active" }, { name: "completed" }, { name: "paused" }]
-        }
+          options: [
+            { name: "active" },
+            { name: "completed" },
+            { name: "paused" },
+          ],
+        },
       },
+
       Progress: { number: {} },
       Target: { number: {} },
       Deadline: { date: {} },
-      Type: { rich_text: {} }
-    }
+      Type: { rich_text: {} },
+    },
   };
 
-  // DEBUG: print everything we will send
-  console.log("===== ensureNotionDatabase START =====");
-  console.log("conn._id:", conn?._id?.toString?.() || conn?.id || "<no-conn-id>");
-  console.log("Using accessToken (masked):", conn?.accessToken ? `${conn.accessToken.slice(0,8)}...` : "<no-token>");
-  console.log("POST URL: https://api.notion.com/v1/databases");
-  console.log("BODY SENT TO NOTION:", JSON.stringify(body, null, 2));
+  console.log("Creating database inside page:", homePageId);
 
   const res = await fetch("https://api.notion.com/v1/databases", {
     method: "POST",
@@ -140,23 +151,22 @@ export const ensureNotionDatabase = async (conn, user) => {
   });
 
   const txt = await res.text();
-  console.log("Notion response status:", res.status);
-  console.log("Notion response body:", txt);
+  console.log("DB Create Response:", txt);
 
   if (!res.ok) {
-    // throw full info so caller catch prints full object (not just .message)
-    const err = new Error(`Notion create database failed: ${res.status} ${txt}`);
-    err.status = res.status;
-    err.body = txt;
-    throw err;
+    throw new Error(
+      `Notion create database failed: ${res.status} ${txt}`
+    );
   }
 
   const data = JSON.parse(txt);
+
   conn.notionDatabaseId = data.id;
   await conn.save();
-  console.log("Saved notionDatabaseId:", data.id);
+
   return data.id;
 };
+
 
 /* ===========================================================
     ENSURE WEEKLY REPORTS PARENT PAGE

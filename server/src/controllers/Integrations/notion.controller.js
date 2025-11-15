@@ -1,4 +1,3 @@
-
 import fetch from "node-fetch";
 import jwt from "jsonwebtoken";
 import Connection from "../../models/Connection.js";
@@ -162,13 +161,12 @@ export const notionCallback = async (req, res) => {
     console.log("🛠 Creating default Notion items...");
 
     try {
+      // FIX: Home page must exist BEFORE database
+      await ensureHomePage(conn);
+      await updateHomePageLinks(conn); // optional but fine
       await ensureNotionDatabase(conn, { _id: userId });
       await ensureReportsParentPage(conn);
       await ensureDailyDashboardDatabase(conn);
-
-      // Home page + links
-      await ensureHomePage(conn);
-      await updateHomePageLinks(conn);
 
       console.log("🟢 All Notion default items created successfully!");
     } catch (err) {
