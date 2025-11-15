@@ -177,7 +177,7 @@ export const ensureReportsParentPage = async (conn) => {
 
   const body = {
     parent: { page_id: homePageId }, // FIXED ✔
-
+    icon: { type: "emoji", emoji: "📝" }, // ADDED ✔
     properties: {
       title: {
         title: [
@@ -431,7 +431,7 @@ export const ensureDailyDashboardDatabase = async (conn) => {
 
   const body = {
     parent: { page_id: homePageId },
-
+    icon: { type: "emoji", emoji: "📊" }, // ADDED ✔
     title: [
       {
         type: "text",
