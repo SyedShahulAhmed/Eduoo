@@ -9,6 +9,7 @@ import goalsRoutes from "./routes/goals.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 import connectionsRoutes from "./routes/connection.routes.js";
 import discordInteractions from "./routes/discord.interactions.js";
+import notionTestRoutes from "./routes/test/notion.test.routes.js"
 
 // 🧩 Load Hooks + Cron BEFORE routes
 import "./events/goals.hooks.js"; 
@@ -42,5 +43,6 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/goals", goalsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/connections", connectionsRoutes);
-
+//Testing routes for notion
+app.use("/api/notion", notionTestRoutes);
 export default app;
