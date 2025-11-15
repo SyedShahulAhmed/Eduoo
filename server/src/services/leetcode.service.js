@@ -1,10 +1,6 @@
 // src/services/leetcode.service.js
 import fetch from "node-fetch";
 
-/**
- * LeetCode GraphQL Query (Public + Stable)
- * Fetches: counts, ranking, contributions, calendar, streak
- */
 const LEETCODE_QUERY = `
   query userProfile($username: String!) {
     allQuestionsCount {
@@ -35,11 +31,11 @@ const LEETCODE_QUERY = `
 
 export const fetchLeetCodeData = async (username) => {
   try {
-    const graphqlRes = await fetch("https://leetcode.com/graphql", {
+    const res = await fetch("https://leetcode.com/graphql", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 EDUOO Bot", // VERY IMPORTANT
+        "User-Agent": "Mozilla/5.0 EDUOO Bot",
         Accept: "application/json",
         Referer: "https://leetcode.com",
         Origin: "https://leetcode.com",
@@ -50,31 +46,37 @@ export const fetchLeetCodeData = async (username) => {
       }),
     });
 
-    const json = await graphqlRes.json();
+    const json = await res.json();
 
-    // GraphQL user not found / invalid username
     if (!json?.data?.matchedUser) {
       throw new Error("User not found");
     }
 
     const user = json.data.matchedUser;
 
-    // Submission counts
     const ac = user.submitStats?.acSubmissionNum || [];
 
     const easy = ac.find((x) => x.difficulty === "Easy")?.count ?? 0;
     const medium = ac.find((x) => x.difficulty === "Medium")?.count ?? 0;
     const hard = ac.find((x) => x.difficulty === "Hard")?.count ?? 0;
-
     const totalSolved = easy + medium + hard;
 
-    // Calendar/Streak
     const calendar = user.userCalendar || {};
-    const streak = calendar.streak ?? 0;
-    const totalActiveDays = calendar.activeDays ?? 0;
+
+    // SAFE submissionCalendar parsing
+    let submissionCalendar = {};
+    try {
+      submissionCalendar =
+        typeof calendar.submissionCalendar === "string"
+          ? JSON.parse(calendar.submissionCalendar)
+          : {};
+    } catch {
+      submissionCalendar = {}; // fallback
+    }
 
     return {
       username,
+
       totalSolved,
       easySolved: easy,
       mediumSolved: medium,
@@ -84,18 +86,15 @@ export const fetchLeetCodeData = async (username) => {
       reputation: user.profile?.reputation ?? 0,
       contributionPoints: user.profile?.contributionPoints ?? 0,
 
-      // Use formula for accurate acceptance rate
       acceptanceRate:
-        totalSolved > 0
-          ? Number(((totalSolved / (totalActiveDays || totalSolved)) * 100).toFixed(2))
-          : 0,
+        totalSolved > 0 ? Number(((easy + medium + hard) / totalSolved).toFixed(2)) : 0,
 
-      streak,
-      totalActiveDays,
-      submissionCalendar: JSON.parse(calendar.submissionCalendar || "{}"),
+      streak: calendar.streak ?? 0,
+      totalActiveDays: calendar.activeDays ?? 0,
+      submissionCalendar,
     };
-  } catch (error) {
-    console.error("❌ fetchLeetCodeData Error:", error.message);
+  } catch (err) {
+    console.error("❌ LeetCode Fetch Error:", err.message);
 
     return {
       error: true,
