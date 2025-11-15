@@ -37,19 +37,10 @@ export const fetchLeetCodeData = async (username) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 EDUOO Bot",
-        Referer: "https://leetcode.com",
-        Origin: "https://leetcode.com",
       },
       body: JSON.stringify(graphqlBody),
     });
-
-    let graphJson;
-    try {
-      graphJson = await graphRes.json();
-    } catch {
-      graphJson = null;
-    }
+    const graphJson = await graphRes.json();
 
     const calendar = graphJson?.data?.matchedUser?.userCalendar || {};
     const {
