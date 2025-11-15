@@ -10,7 +10,7 @@ import reportsRoutes from "./routes/reports.routes.js";
 import connectionsRoutes from "./routes/connection.routes.js";
 import discordInteractions from "./routes/discord.interactions.js";
 import notionTestRoutes from "./routes/test/notion.test.routes.js"
-
+import { authMiddleware } from "./middlewares/auth.middleware.js";
 // 🧩 Load Hooks + Cron BEFORE routes
 import "./events/goals.hooks.js"; 
 import "./cron/notionSync.cron.js";
@@ -44,5 +44,5 @@ app.use("/api/goals", goalsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/connections", connectionsRoutes);
 //Testing routes for notion
-app.use("/api/notion", notionTestRoutes);
+app.use("/api/notion",authMiddleware, notionTestRoutes);
 export default app;
