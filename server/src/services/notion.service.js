@@ -2,7 +2,7 @@ import fetch from "node-fetch";
 import Connection from "../models/Connection.js";
 import Goal from "../models/Goal.js";
 import { ENV } from "../config/env.js";
-
+import { generateOneLineReco } from "../services/aiInsights.service.js";
 /**
  * Minimal wrappers for Notion API calls used by the sync logic.
  * Corrected parents and added EDUOO Home page + links + backup auto-create.
@@ -549,113 +549,71 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
 
   const title = `Weekly Summary — ${payload.startDate.toLocaleDateString()} to ${payload.endDate.toLocaleDateString()}`;
 
+  const m = payload.metrics;
+  const connected = payload.connections; // { github: connObj, ... }
+
+  // === CONDITIONAL METRIC BLOCKS ===
+  const metricBlocks = [];
+
+  if (m.github != null) {
+    metricBlocks.push(makeBullet(`🐙 GitHub: ${m.github} commits`));
+  }
+
+  if (m.leetcode != null) {
+    metricBlocks.push(makeBullet(`🧩 LeetCode: ${m.leetcode} problems`));
+  }
+
+  if (m.spotify != null) {
+    metricBlocks.push(makeBullet(`🎧 Spotify Focus: ${m.spotify} minutes`));
+  }
+
+  if (m.codeforces != null) {
+    metricBlocks.push(makeBullet(`🏆 Codeforces: ${m.codeforces.ratingChange} rating change`));
+  }
+
+  if (m.codechef != null) {
+    metricBlocks.push(makeBullet(`🍽️ CodeChef: ${m.codechef.ratingChange} rating change`));
+  }
+
+  // === AI RECOMMENDATIONS FOR CONNECTED PLATFORMS ===
+  const recoBlocks = [];
+
+  for (const platform of Object.keys(connected)) {
+    if (!m[platform]) continue; // skip if no metrics
+
+    const reco = await generateOneLineReco(platform, m[platform]);
+    recoBlocks.push(makeBullet(`💡 ${platform.toUpperCase()}: ${reco}`));
+  }
+
+  // === BUILD NOTION PAGE BODY ===
   const body = {
     parent: { page_id: parentId },
 
-    // CORRECT title property format
+    icon: { type: "emoji", emoji: "📝" },
+
     properties: {
       title: {
         title: [
           {
             type: "text",
-            text: { content: title },
-          },
-        ],
-      },
+            text: { content: title }
+          }
+        ]
+      }
     },
 
-    // FIXED BLOCK STRUCTURES
     children: [
-      {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [
-            {
-              type: "text",
-              text: { content: title },
-            },
-          ],
-        },
-      },
+      // HEADER
+      makeHeading(`📅 ${title}`),
 
-      {
-        object: "block",
-        type: "paragraph",
-        paragraph: {
-          rich_text: [
-            {
-              type: "text",
-              text: { content: payload.summaryText || "" },
-            },
-          ],
-        },
-      },
+      // ACTIVITY BREAKDOWN
+      makeHeading("📊 Activity Breakdown"),
+      ...metricBlocks,
 
-      // GitHub
-      {
-        object: "block",
-        type: "bulleted_list_item",
-        bulleted_list_item: {
-          rich_text: [
-            {
-              type: "text",
-              text: {
-                content: `GitHub: ${payload.metrics.github || 0} commits`,
-              },
-            },
-          ],
-        },
-      },
-
-      // LeetCode
-      {
-        object: "block",
-        type: "bulleted_list_item",
-        bulleted_list_item: {
-          rich_text: [
-            {
-              type: "text",
-              text: {
-                content: `LeetCode: ${payload.metrics.leetcode || 0} problems`,
-              },
-            },
-          ],
-        },
-      },
-
-      // Spotify
-      {
-        object: "block",
-        type: "bulleted_list_item",
-        bulleted_list_item: {
-          rich_text: [
-            {
-              type: "text",
-              text: {
-                content: `Spotify: ${payload.metrics.spotify || 0} minutes focus`,
-              },
-            },
-          ],
-        },
-      },
-
-      // Streaks
-      {
-        object: "block",
-        type: "bulleted_list_item",
-        bulleted_list_item: {
-          rich_text: [
-            {
-              type: "text",
-              text: {
-                content: `Streaks: ${payload.metrics.streaks || "N/A"}`,
-              },
-            },
-          ],
-        },
-      },
-    ],
+      // RECOMMENDATIONS
+      makeHeading("✨ Recommendations for Next Week"),
+      ...recoBlocks,
+    ]
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
@@ -670,15 +628,36 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
     throw new Error(`Notion create weekly page failed: ${res.status} ${txt}`);
   }
 
-  let data;
-  try {
-    data = JSON.parse(txt);
-  } catch (err) {
-    throw new Error(`Weekly report parse failed: ${err.message}`);
-  }
-
-  return data;
+  return JSON.parse(txt);
 };
+
+// UTILITIES
+const makeHeading = (text) => ({
+  object: "block",
+  type: "heading_2",
+  heading_2: {
+    rich_text: [
+      {
+        type: "text",
+        text: { content: text }
+      }
+    ]
+  }
+});
+
+const makeBullet = (text) => ({
+  object: "block",
+  type: "bulleted_list_item",
+  bulleted_list_item: {
+    rich_text: [
+      {
+        type: "text",
+        text: { content: text }
+      }
+    ]
+  }
+});
+
 
 /* ===========================================================
     HOME PAGE (EDUOO Home) + LINK BLOCKS

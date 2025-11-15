@@ -1,47 +1,28 @@
-export const generateAIInsights = async ({ type, data }) => {
-  if (type === "spotify") {
-    const topArtists = [...new Set(data.map((t) => t.artist))].slice(0, 5);
-    const avgDuration =
-      data.reduce((acc, t) => acc + t.duration_ms, 0) / data.length / 60000;
-    const focusScore = Math.min(100, Math.round(avgDuration * 10));
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { ENV } from "../config/env.js";
 
-    return {
-      summary: `Top artists: ${topArtists.join(", ")}.`,
-      avgListeningTime: `${avgDuration.toFixed(1)} mins per track`,
-      focusScore,
-      suggestion:
-        focusScore > 70
-          ? "Your listening habits suggest strong focus patterns. Keep your productive playlists handy!"
-          : "Try more instrumental or low-lyric playlists to improve your focus sessions.",
-    };
-  }
-  if (type === "notion") {
-    const totalDatabases = data.length;
-    const titles = data.map((d) => d.title).slice(0, 5);
+const genAI = new GoogleGenerativeAI(ENV.GEMINI_API_KEY);
 
-    return {
-      summary: `You have ${totalDatabases} active Notion databases. Top: ${titles.join(", ")}.`,
-      recommendation:
-        totalDatabases > 5
-          ? "Consider consolidating some databases for focus."
-          : "Your workspace looks well organized — keep it up!",
-    };
-  }
-  if (type === "google_calendar") {
-    const totalEvents = data.length;
-    const firstEvent = data[0]?.summary || "No events";
-    const workRatio = Math.round(
-      (data.filter((e) => /meeting|work|call/i.test(e.summary)).length / totalEvents) * 100
-    );
+export const generateOneLineReco = async (platform, metrics) => {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    return {
-      summary: `You have ${totalEvents} events upcoming. Next: "${firstEvent}".`,
-      workRatio: `${workRatio}% appear to be work-related.`,
-      suggestion:
-        workRatio > 70
-          ? "Your schedule is heavily work-oriented — consider adding breaks or relaxation slots."
-          : "Good balance! Maintain a healthy mix of tasks and downtime.",
-    };
+    const prompt = `
+Give me ONE LINE motivational recommendation ONLY for next week's improvement.
+Target platform: ${platform}
+Metrics: ${JSON.stringify(metrics)}
+
+Rules:
+- Only one single sentence.
+- Keep it short and positive.
+- Include a relevant emoji.
+- DO NOT mention platforms that are not in target.
+`;
+
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim();
+  } catch (err) {
+    console.error("Gemini 1-line reco error:", err.message);
+    return `Stay consistent on ${platform} next week! 💪`;
   }
-  return { summary: "No AI insights available yet." };
 };
