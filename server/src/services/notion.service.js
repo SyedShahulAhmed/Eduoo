@@ -555,28 +555,48 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
   const metricBlocks = [];
 
   if (metrics.github) {
-    metricBlocks.push(makeBullet(`🐙 GitHub Commits: ${metrics.github.commits}`));
+    metricBlocks.push(
+      makeBullet(`🐙 GitHub Commits: ${metrics.github.commits}`)
+    );
   }
   if (metrics.leetcode) {
-    metricBlocks.push(makeBullet(`🧩 LeetCode Solved: ${metrics.leetcode.solved}`));
+    metricBlocks.push(
+      makeBullet(`🧩 LeetCode Solved: ${metrics.leetcode.solved}`)
+    );
   }
   if (metrics.spotify) {
-    metricBlocks.push(makeBullet(`🎧 Spotify Focus: ${metrics.spotify.minutes} minutes`));
+    metricBlocks.push(
+      makeBullet(`🎧 Spotify Focus: ${metrics.spotify.minutes} minutes`)
+    );
   }
   if (metrics.codeforces) {
-    metricBlocks.push(makeBullet(`🏆 Codeforces Rating Change: ${metrics.codeforces.ratingChange}`));
+    metricBlocks.push(
+      makeBullet(
+        `🏆 Codeforces Rating Change: ${metrics.codeforces.ratingChange}`
+      )
+    );
   }
   if (metrics.codechef) {
-    metricBlocks.push(makeBullet(`🍽️ CodeChef Rating: ${metrics.codechef.rating}`));
+    metricBlocks.push(
+      makeBullet(`🍽️ CodeChef Rating: ${metrics.codechef.rating}`)
+    );
   }
   if (metrics.duolingo) {
-    metricBlocks.push(makeBullet(`🦉 Duolingo Streak: ${metrics.duolingo.streak} days`));
+    metricBlocks.push(
+      makeBullet(`🦉 Duolingo Streak: ${metrics.duolingo.streak} days`)
+    );
   }
 
   const recoBlocks = [];
 
   for (const platform of Object.keys(connected)) {
-    if (!metrics[platform]) continue;
+    if (
+      !metrics ||
+      !metrics[platform] ||
+      typeof metrics[platform] !== "object"
+    ) {
+      continue;
+    }
 
     const aiReco = await generateOneLineReco(platform, metrics[platform]);
     recoBlocks.push(makeBullet(`💡 ${platform.toUpperCase()}: ${aiReco}`));
@@ -618,7 +638,6 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
   return JSON.parse(txt);
 };
 
-
 // UTILITIES
 const makeHeading = (text) => ({
   object: "block",
@@ -627,10 +646,10 @@ const makeHeading = (text) => ({
     rich_text: [
       {
         type: "text",
-        text: { content: text }
-      }
-    ]
-  }
+        text: { content: text },
+      },
+    ],
+  },
 });
 
 const makeBullet = (text) => ({
@@ -640,12 +659,11 @@ const makeBullet = (text) => ({
     rich_text: [
       {
         type: "text",
-        text: { content: text }
-      }
-    ]
-  }
+        text: { content: text },
+      },
+    ],
+  },
 });
-
 
 /* ===========================================================
     HOME PAGE (EDUOO Home) + LINK BLOCKS
