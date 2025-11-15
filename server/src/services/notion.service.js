@@ -154,9 +154,7 @@ export const ensureNotionDatabase = async (conn, user) => {
   console.log("DB Create Response:", txt);
 
   if (!res.ok) {
-    throw new Error(
-      `Notion create database failed: ${res.status} ${txt}`
-    );
+    throw new Error(`Notion create database failed: ${res.status} ${txt}`);
   }
 
   const data = JSON.parse(txt);
@@ -167,18 +165,18 @@ export const ensureNotionDatabase = async (conn, user) => {
   return data.id;
 };
 
-
 /* ===========================================================
     ENSURE WEEKLY REPORTS PARENT PAGE
 =========================================================== */
 
 export const ensureReportsParentPage = async (conn) => {
-  // Already exists? return it.
   if (conn.notionReportsPageId) return conn.notionReportsPageId;
 
-  // ✅ Correct Notion page creation shape
+  // FIX: Place Weekly Reports INSIDE EDUOO Home
+  const homePageId = await ensureHomePage(conn);
+
   const body = {
-    parent: { type: "workspace", workspace: true }, // FIXED
+    parent: { page_id: homePageId }, // FIXED ✔
 
     properties: {
       title: {
@@ -191,7 +189,6 @@ export const ensureReportsParentPage = async (conn) => {
       },
     },
 
-    // Page content
     children: [
       {
         object: "block",
@@ -222,14 +219,8 @@ export const ensureReportsParentPage = async (conn) => {
     throw new Error(`Notion create reports page failed: ${res.status} ${txt}`);
   }
 
-  let data;
-  try {
-    data = JSON.parse(txt);
-  } catch (e) {
-    throw new Error(`Notion reports page parse failed: ${e.message}`);
-  }
+  const data = JSON.parse(txt);
 
-  // Save the parent page in DB
   conn.notionReportsPageId = data.id;
   await conn.save();
 
@@ -435,11 +426,11 @@ export const ensureDailyDashboardDatabase = async (conn) => {
     return conn.metadata.dailyDashboardDbId;
   }
 
-  // FIX: use Home Page as parent
+  // Parent page = Home Page
   const homePageId = await ensureHomePage(conn);
 
   const body = {
-    parent: { page_id: homePageId },  // FIXED ✔
+    parent: { page_id: homePageId },
 
     title: [
       {
@@ -449,10 +440,16 @@ export const ensureDailyDashboardDatabase = async (conn) => {
     ],
 
     properties: {
+      Name: { title: {} }, // REQUIRED ✔
+
       Date: { date: {} },
+
       "GitHub Commits": { number: {} },
+
       "LeetCode Problems": { number: {} },
+
       "Spotify Focus Time (min)": { number: {} },
+
       Notes: { rich_text: {} },
     },
   };
@@ -481,7 +478,6 @@ export const ensureDailyDashboardDatabase = async (conn) => {
 
   return data.id;
 };
-
 
 export const createDailyDashboardRow = async (conn, row) => {
   // Ensure DB exists
@@ -688,7 +684,6 @@ export const createWeeklyReportSubpage = async (conn, payload) => {
     HOME PAGE (EDUOO Home) + LINK BLOCKS
 =========================================================== */
 
-
 export const ensureHomePage = async (conn) => {
   if (conn.notionHomePageId) return conn.notionHomePageId;
 
@@ -701,10 +696,10 @@ export const ensureHomePage = async (conn) => {
         title: [
           {
             type: "text",
-            text: { content: "EDUOO Home" }
-          }
-        ]
-      }
+            text: { content: "EDUOO Home" },
+          },
+        ],
+      },
     },
 
     children: [
@@ -716,14 +711,13 @@ export const ensureHomePage = async (conn) => {
             {
               type: "text",
               text: {
-                content:
-                  "Welcome to your central EDUOO productivity hub."
-              }
-            }
-          ]
-        }
-      }
-    ]
+                content: "Welcome to your central EDUOO productivity hub.",
+              },
+            },
+          ],
+        },
+      },
+    ],
   };
 
   console.log("📤 Creating Home Page:", JSON.stringify(body, null, 2));
@@ -749,9 +743,6 @@ export const ensureHomePage = async (conn) => {
   return data.id;
 };
 
-
-
-
 export const updateHomePageLinks = async (conn) => {
   const homeId = await ensureHomePage(conn);
 
@@ -763,8 +754,8 @@ export const updateHomePageLinks = async (conn) => {
       object: "block",
       type: "bookmark",
       bookmark: {
-        url: `https://www.notion.so/${conn.notionDatabaseId.replace(/-/g, "")}`
-      }
+        url: `https://www.notion.so/${conn.notionDatabaseId.replace(/-/g, "")}`,
+      },
     });
   }
 
@@ -777,8 +768,8 @@ export const updateHomePageLinks = async (conn) => {
         url: `https://www.notion.so/${conn.metadata.dailyDashboardDbId.replace(
           /-/g,
           ""
-        )}`
-      }
+        )}`,
+      },
     });
   }
 
@@ -791,8 +782,8 @@ export const updateHomePageLinks = async (conn) => {
         url: `https://www.notion.so/${conn.notionReportsPageId.replace(
           /-/g,
           ""
-        )}`
-      }
+        )}`,
+      },
     });
   }
 
@@ -800,7 +791,7 @@ export const updateHomePageLinks = async (conn) => {
   if (blocks.length === 0) return;
 
   const body = {
-    children: blocks
+    children: blocks,
   };
 
   const res = await fetch(
@@ -808,16 +799,14 @@ export const updateHomePageLinks = async (conn) => {
     {
       method: "PATCH",
       headers: NOTION_HEADERS(conn.accessToken),
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     }
   );
 
   const txt = await res.text();
 
   if (!res.ok) {
-    throw new Error(
-      `Notion update home links failed: ${res.status} ${txt}`
-    );
+    throw new Error(`Notion update home links failed: ${res.status} ${txt}`);
   }
 
   let data;
@@ -851,10 +840,10 @@ export const backupReportToNotion = async (conn, title, rawJson) => {
         title: [
           {
             type: "text",
-            text: { content: title }
-          }
-        ]
-      }
+            text: { content: title },
+          },
+        ],
+      },
     },
 
     // JSON content
@@ -866,18 +855,18 @@ export const backupReportToNotion = async (conn, title, rawJson) => {
           rich_text: [
             {
               type: "text",
-              text: { content: jsonText }
-            }
-          ]
-        }
-      }
-    ]
+              text: { content: jsonText },
+            },
+          ],
+        },
+      },
+    ],
   };
 
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: NOTION_HEADERS(conn.accessToken),
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 
   const txt = await res.text();
