@@ -431,14 +431,15 @@ export const syncPendingGoalsForUser = async (conn) => {
 =========================================================== */
 
 export const ensureDailyDashboardDatabase = async (conn) => {
-  // Already exists
   if (conn.metadata?.dailyDashboardDbId) {
     return conn.metadata.dailyDashboardDbId;
   }
 
-  // Create DB (correct schema)
+  // FIX: use Home Page as parent
+  const homePageId = await ensureHomePage(conn);
+
   const body = {
-    parent: { type: "workspace", workspace: true }, // FIXED
+    parent: { page_id: homePageId },  // FIXED ✔
 
     title: [
       {
@@ -449,13 +450,9 @@ export const ensureDailyDashboardDatabase = async (conn) => {
 
     properties: {
       Date: { date: {} },
-
       "GitHub Commits": { number: {} },
-
       "LeetCode Problems": { number: {} },
-
       "Spotify Focus Time (min)": { number: {} },
-
       Notes: { rich_text: {} },
     },
   };
@@ -467,19 +464,14 @@ export const ensureDailyDashboardDatabase = async (conn) => {
   });
 
   const txt = await res.text();
+  console.log("📊 Dashboard Create Response:", txt);
 
   if (!res.ok) {
     throw new Error(`Notion create dashboard DB failed: ${res.status} ${txt}`);
   }
 
-  let data;
-  try {
-    data = JSON.parse(txt);
-  } catch (err) {
-    throw new Error(`Dashboard DB parse failed: ${err.message}`);
-  }
+  const data = JSON.parse(txt);
 
-  // Save to connection metadata
   conn.metadata = {
     ...(conn.metadata || {}),
     dailyDashboardDbId: data.id,
@@ -489,6 +481,7 @@ export const ensureDailyDashboardDatabase = async (conn) => {
 
   return data.id;
 };
+
 
 export const createDailyDashboardRow = async (conn, row) => {
   // Ensure DB exists
